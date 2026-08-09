@@ -1,0 +1,31 @@
+{
+  "spike_id": "spike_4_context_builder_and_token_budgeting",
+  "status": "SUCCESS",
+  "executed_at": "2026-08-07T19:58:04.771263",
+  "target_asset": "DataLakeCsv",
+  "budget_configured": 4000,
+  "raw_tokens": 6353,
+  "compressed_tokens": 263,
+  "token_savings_pct": 95.9,
+  "context_package": {
+    "target_asset_name": "DataLakeCsv",
+    "target_asset_type": "Dataset",
+    "generated_at": "2026-08-07T19:58:04.753184",
+    "token_budget": 4000,
+    "raw_uncompressed_tokens": 6353,
+    "compressed_context_tokens": 263,
+    "compression_ratio": 95.9,
+    "executive_summary_md": "### Executive Summary\n- **Asset:** `DataLakeCsv` (Type: `Dataset`)\n- **Folder:** `DataLake`\n- **Description:** Azure Data Factory Enterprise Asset",
+    "activity_flow_md": "### Minute Activity Execution Sequence\n*None recorded.*",
+    "dataset_schemas_md": "### Input / Output Datasets & Schemas\n- **`DataLakeCsv`** *[DelimitedText]* (LinkedService: `DataLake`, Folder: `DataLake`)\n  - Columns: *Dynamic / Schema-on-Read*",
+    "lineage_and_blast_radius_md": "### Upstream Lineage & Downstream Blast Radius\n- **Systemic Risk Level:** `CRITICAL` (Risk Score: `100/100`)\n- **Total Downstream Blast Radius:** `20` affected entities\n- **Impacted Downstream Pipelines:** `Pre Release`\n- **Upstream Inflow Feeds:** `Get VendorSet` (Activity), `RailCarRx_VendorLoad` (Pipeline), `Lookup VendorSet` (Activity), `ForEach Vendor` (Activity)",
+    "linked_services_md": "### Connected Compute & Storage Services\n- **`DataLake`** *[AzureBlobFS]* -> Host/Endpoint: `Configured via Key Vault` *(Secrets Redacted)*",
+    "full_prompt_payload_md": "## Platform Intelligence Engine (PIE) - Verified Asset Context\n\n**Target Entity:** `DataLakeCsv` | **Type:** `Dataset`\n\n### Executive Summary\n- **Asset:** `DataLakeCsv` (Type: `Dataset`)\n- **Folder:** `DataLake`\n- **Description:** Azure Data Factory Enterprise Asset\n\n### Minute Activity Execution Sequence\n*None recorded.*\n\n### Input / Output Datasets & Schemas\n- **`DataLakeCsv`** *[DelimitedText]* (LinkedService: `DataLake`, Folder: `DataLake`)\n  - Columns: *Dynamic / Schema-on-Read*\n\n### Upstream Lineage & Downstream Blast Radius\n- **Systemic Risk Level:** `CRITICAL` (Risk Score: `100/100`)\n- **Total Downstream Blast Radius:** `20` affected entities\n- **Impacted Downstream Pipelines:** `Pre Release`\n- **Upstream Inflow Feeds:** `Get VendorSet` (Activity), `RailCarRx_VendorLoad` (Pipeline), `Lookup VendorSet` (Activity), `ForEach Vendor` (Activity)\n\n### Connected Compute & Storage Services\n- **`DataLake`** *[AzureBlobFS]* -> Host/Endpoint: `Configured via Key Vault` *(Secrets Redacted)*",
+    "metadata_summary": {
+      "subgraph_nodes": 35,
+      "subgraph_edges": 38,
+      "risk_score": 100,
+      "risk_level": "CRITICAL"
+    }
+  }
+}

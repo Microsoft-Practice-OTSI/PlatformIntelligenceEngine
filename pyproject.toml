@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adpie"
+version = "0.3.0"
+description = "Platform Intelligence Engine (PIE) - Core Engineering Intelligence & Knowledge Layer for Azure Data Factory"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "PIE Engineering Team" }
+]
+dependencies = [
+    "azure-identity>=1.15.0",
+    "azure-mgmt-resource>=23.0.0",
+    "azure-mgmt-datafactory>=3.1.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.7.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "httpx>=0.27.0",
+    "msal>=1.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+pie = "pie.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

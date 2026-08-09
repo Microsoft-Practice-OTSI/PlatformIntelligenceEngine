@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd d:\\\\Gravity\\\\ADPIE ; python -c \"\nfrom pie\\.discovery\\.repository import get_repository\n\n# Test if the factory we just synced is in the repo\nrepo = get_repository\\(\\)\nfactories = repo\\.list_factories\\(tenant_id='default'\\)  # This is what the API uses\nprint\\('Factories in repo \\(default tenant\\):', \\[f\\.factory_name for f in factories\\]\\)\n\n# Also try with different tenant\nfactories2 = repo\\.list_factories\\(\\)\nprint\\('All factories in repo:', \\[f\\.factory_name for f in factories2\\]\\)\n\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
