@@ -139,7 +139,11 @@ export default function Sidebar({ selectedModel, setSelectedModel }) {
         </div>
       </div>
 
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        authenticated={sessionInfo?.authenticated}
+      />
     </div>
   );
 }
