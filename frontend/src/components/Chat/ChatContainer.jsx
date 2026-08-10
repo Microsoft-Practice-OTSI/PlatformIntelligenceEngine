@@ -2,6 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Bot, User } from 'lucide-react';
 import { apiClient } from '../../api/client';
 
+const parseSSEBlock = (raw) => {
+  let eventType = 'message';
+  let data = '';
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) eventType = line.slice(6).trim();
+    else if (line.startsWith('data:')) data += line.slice(5).trim();
+  }
+  if (!data) return null;
+  try {
+    return { type: eventType, payload: JSON.parse(data) };
+  } catch {
+    return null;
+  }
+};
+
 export default function ChatContainer({ selectedModel }) {
   const [messages, setMessages] = useState([
     {
@@ -12,8 +27,13 @@ export default function ChatContainer({ selectedModel }) {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  
+  const [streamStarted, setStreamStarted] = useState(false);
+
   const chatEndRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  if (!sessionIdRef.current) {
+    sessionIdRef.current = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,56 +47,91 @@ export default function ChatContainer({ selectedModel }) {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
+    setStreamStarted(false);
+
+    const aiMessage = { id: Date.now() + 1, role: 'assistant', content: '' };
+    setMessages((prev) => [...prev, aiMessage]);
+
+    const factoryName = localStorage.getItem('selected_factory') || 'default';
+    const sessionToken = localStorage.getItem('x_session_token');
+    const apiBase = apiClient.defaults.baseURL;
+
+    let receivedText = '';
 
     try {
-      // Get factory name from localStorage (set during factory selection)
-      const factoryName = localStorage.getItem('selected_factory') || 'default';
-      const sessionToken = localStorage.getItem('x_session_token');
-      
-      console.log('Sending chat request with:', {
-        factory: factoryName,
-        model: selectedModel,
-        sessionToken: sessionToken ? '✓ present' : '✗ missing',
-        query: userMessage.content.substring(0, 50) + '...'
+      const response = await fetch(`${apiBase}/ai/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { 'X-Session-Token': sessionToken } : {}),
+        },
+        body: JSON.stringify({
+          query: userMessage.content,
+          factory_name: factoryName,
+          model: selectedModel,
+          session_id: sessionIdRef.current,
+        }),
       });
-      
-      const response = await apiClient.post('/ai/ask', {
-        query: userMessage.content,
-        factory_name: factoryName,
-        model: selectedModel
-      });
-      
-      console.log('Chat response received:', response.data);
 
-      const aiMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: response.data.response_markdown || response.data.answer || 'Completed.'
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || `Server responded with ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      const processBlock = (raw) => {
+        const parsed = parseSSEBlock(raw);
+        if (!parsed) return;
+        const { type, payload } = parsed;
+        if (type === 'token' && payload.token) {
+          if (!streamStarted) setStreamStarted(true);
+          receivedText += payload.token;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === aiMessage.id ? { ...m, content: receivedText } : m))
+          );
+        } else if (type === 'error') {
+          throw new Error(payload.message || 'Streaming error');
+        } else if (type === 'metadata') {
+          console.log('Chat metadata:', payload);
+        }
       };
-      setMessages((prev) => [...prev, aiMessage]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sepIdx;
+        while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+          const raw = buffer.slice(0, sepIdx);
+          buffer = buffer.slice(sepIdx + 2);
+          processBlock(raw);
+        }
+      }
+      if (buffer.trim()) processBlock(buffer);
     } catch (error) {
-      console.error('Chat API Error:', {
+      console.error('Chat stream error:', {
         message: error.message,
         status: error.response?.status,
-        statusText: error.response?.statusText,
         data: error.response?.data,
-        headers: error.response?.headers,
-        request: error.request?.url,
-        stack: error.stack
       });
-      
-      const errorDetail = error.response?.data?.detail 
-        || error.response?.data?.message 
-        || error.message 
-        || 'Unknown error';
-      
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: `**Error:** ${errorDetail}\n\nDebug: Check browser console (F12) for full details.`
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+
+      const errorDetail = error.message || 'Unknown error';
+      if (!receivedText) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === aiMessage.id ? { ...m, content: `**Error:** ${errorDetail}` } : m))
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMessage.id ? { ...m, content: m.content + '\n\n_Stream interrupted._' } : m
+          )
+        );
+      }
     } finally {
+      setStreamStarted(false);
       setLoading(false);
     }
   };
@@ -97,7 +152,7 @@ export default function ChatContainer({ selectedModel }) {
             </div>
           </div>
         ))}
-        {loading && (
+        {loading && !streamStarted && (
           <div className="flex gap-4 max-w-3xl mx-auto w-full">
             <div className="w-8 h-8 rounded-sm bg-status-success flex items-center justify-center shrink-0">
               <Bot size={20} className="text-white" />

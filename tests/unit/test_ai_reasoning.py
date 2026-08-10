@@ -135,18 +135,17 @@ def test_pie_reasoning_engine_end_to_end(ai_test_factory):
 def test_how_many_pipelines_with_punctuation(ai_test_factory):
     """Trailing punctuation must not defeat stop-word filtering (regression: 'there?').
 
-    'how many pipelines are there?' must fall through to the inventory/count branch
-    instead of being treated as a keyword filter for 'there?' (which matched 0).
+    'how many pipelines are there?' must be recognized as a plain count question and
+    answered concisely instead of being treated as a keyword filter for 'there?' (which matched 0).
     """
     graph = KnowledgeGraphBuilder.build(ai_test_factory)
     engine = PIEReasoningEngine(graph)
 
     resp = engine.ask("how many pipelines are there?")
     assert resp.detected_intent == QueryIntent.GENERAL
-    assert "Pipeline Inventory" in resp.response_markdown
-    assert "Pipeline Count" in resp.response_markdown
-    assert "PL_Customer_Ingestion" in resp.response_markdown
+    assert "has **1** pipelines." in resp.response_markdown
     assert "Matching Pipelines" not in resp.response_markdown
+    assert "Pipeline Inventory" not in resp.response_markdown
 
 
 def test_how_many_filter_pipelines_with_punctuation(ai_test_factory):

@@ -193,6 +193,14 @@ class AIAskRequest(BaseModel):
     query: str
     factory_name: Optional[str] = None
     model: str = "azure-openai"
+    session_id: Optional[str] = None
+
+
+class ChatStreamRequest(BaseModel):
+    query: str
+    factory_name: Optional[str] = None
+    model: str = "nvidia-nim"
+    session_id: Optional[str] = None
 
 
 class AIAskResponse(BaseModel):

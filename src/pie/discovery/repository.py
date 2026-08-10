@@ -21,6 +21,135 @@ from pie.discovery.models import (
 logger = get_logger(__name__)
 
 
+def render_factory_full_context(factory: FactoryMetadata) -> str:
+    """Render the FULL verified factory metadata as a markdown LLM context block."""
+    if factory is None:
+        return ""
+
+    lines: list[str] = [
+        "## FACTORY CONTEXT (100% verified Azure Data Factory metadata)",
+        f"- **Factory:** `{factory.factory_name}`",
+        f"- **Resource Group:** `{factory.resource_group}`",
+        f"- **Subscription ID:** `{factory.subscription_id}`",
+        f"- **Location:** `{factory.location}`",
+    ]
+
+    if factory.global_parameters:
+        lines.append(f"### Global Parameters ({len(factory.global_parameters)})")
+        for pname, pdef in factory.global_parameters.items():
+            if isinstance(pdef, dict):
+                lines.append(f"- `{pname}`: type={pdef.get('type', 'String')}, value=`{pdef.get('value')}`")
+            else:
+                lines.append(f"- `{pname}`: `{pdef}`")
+
+    lines.append(f"### Pipelines ({len(factory.pipelines)})")
+    if not factory.pipelines:
+        lines.append("- None")
+    for p in factory.pipelines:
+        header = f"- **`{p.name}`**"
+        bits = []
+        if p.folder:
+            bits.append(f"folder={p.folder}")
+        if p.description:
+            bits.append(f"desc={p.description}")
+        if p.concurrency is not None:
+            bits.append(f"concurrency={p.concurrency}")
+        if p.annotations:
+            bits.append(f"annotations={p.annotations}")
+        if p.parameters:
+            bits.append(f"params={{{', '.join(f'{k}: {v.type}' for k, v in p.parameters.items())}}}")
+        if p.variables:
+            bits.append(f"vars={{{', '.join(f'{k}: {v.type}' for k, v in p.variables.items())}}}")
+        lines.append(header + (f" ({'; '.join(bits)})" if bits else ""))
+        for a in p.activities:
+            act = f"    - Activity `{a.name}` [{a.type}]"
+            details = []
+            if a.inputs:
+                details.append(f"in={a.inputs}")
+            if a.outputs:
+                details.append(f"out={a.outputs}")
+            if a.linked_service:
+                details.append(f"ls={a.linked_service}")
+            if a.called_pipeline:
+                details.append(f"calls={a.called_pipeline}")
+            if a.depends_on:
+                details.append(f"deps={a.depends_on}")
+            if a.retry_policy and a.retry_policy.count:
+                details.append(f"retry={a.retry_policy.count}")
+            if a.timeout:
+                details.append(f"timeout={a.timeout}")
+            lines.append(act + (f" ({'; '.join(details)})" if details else ""))
+
+    lines.append(f"### Datasets ({len(factory.datasets)})")
+    if not factory.datasets:
+        lines.append("- None")
+    for ds in factory.datasets:
+        header = f"- **`{ds.name}`** [{ds.type}] linked_service=`{ds.linked_service_name}`"
+        bits = []
+        if ds.folder:
+            bits.append(f"folder={ds.folder}")
+        if ds.description:
+            bits.append(f"desc={ds.description}")
+        if ds.location_details:
+            bits.append(f"loc={ds.location_details}")
+        if ds.parameters:
+            bits.append(f"params={list(ds.parameters.keys())}")
+        if ds.annotations:
+            bits.append(f"annotations={ds.annotations}")
+        lines.append(header + (f" ({'; '.join(bits)})" if bits else ""))
+        if ds.schema_fields:
+            schema = ", ".join(f"{sf.get('name')}: {sf.get('type')}" for sf in ds.schema_fields)
+            lines.append(f"    - Schema: {schema}")
+
+    lines.append(f"### Linked Services ({len(factory.linked_services)})")
+    if not factory.linked_services:
+        lines.append("- None")
+    for ls in factory.linked_services:
+        header = f"- **`{ls.name}`** [{ls.type}]"
+        bits = []
+        if ls.connect_via_integration_runtime:
+            bits.append(f"ir={ls.connect_via_integration_runtime}")
+        if ls.connection_properties:
+            bits.append(f"conn={ls.connection_properties}")
+        if ls.annotations:
+            bits.append(f"annotations={ls.annotations}")
+        lines.append(header + (f" ({'; '.join(bits)})" if bits else ""))
+
+    lines.append(f"### Triggers ({len(factory.triggers)})")
+    if not factory.triggers:
+        lines.append("- None")
+    for t in factory.triggers:
+        header = f"- **`{t.name}`** [{t.type}]"
+        bits = []
+        if t.recurrence_schedule:
+            bits.append(f"schedule={t.recurrence_schedule}")
+        if t.pipelines:
+            bits.append(f"fires={t.pipelines}")
+        if t.runtime_state:
+            bits.append(f"state={t.runtime_state}")
+        if t.parameters:
+            bits.append(f"params={t.parameters}")
+        lines.append(header + (f" ({'; '.join(bits)})" if bits else ""))
+
+    lines.append(f"### Data Flows ({len(factory.data_flows)})")
+    if not factory.data_flows:
+        lines.append("- None")
+    for df in factory.data_flows:
+        header = f"- **`{df.name}`** [{df.type}]"
+        bits = []
+        if df.description:
+            bits.append(f"desc={df.description}")
+        if df.sources:
+            bits.append(f"sources={df.sources}")
+        if df.sinks:
+            bits.append(f"sinks={df.sinks}")
+        if df.transformations:
+            bits.append(f"transformations={df.transformations}")
+        lines.append(header + (f" ({'; '.join(bits)})" if bits else ""))
+
+    return "\n".join(lines)
+
+
 class MetadataRepository:
     """Thread-safe in-memory cache and repository for discovered Azure Data Factory metadata.
     
@@ -37,6 +166,10 @@ class MetadataRepository:
         self._last_refreshed_at: dict[tuple[str, str, str], str] = {}
         # Fast pipeline lookup index: (tenant_id, pipeline_name) -> PipelineMetadata
         self._pipeline_index: dict[tuple[str, str], PipelineMetadata] = {}
+        # Key: (tenant_id, subscription_id, factory_name) -> provenance tag.
+        # "arm" = real Azure ARM extraction, "cache" = restored from disk cache,
+        # "mock" = demo/test fixture, "unknown" = not yet classified.
+        self._provenance: dict[tuple[str, str, str], str] = {}
 
     def _normalize_key(self, tenant_id: Optional[str], subscription_id: Optional[str], factory_name: str) -> tuple[str, str, str]:
         t_id = (tenant_id or "default-tenant").strip().lower()
@@ -50,6 +183,7 @@ class MetadataRepository:
         tenant_id: Optional[str] = None,
         subscription_id: Optional[str] = None,
         last_refreshed_at: Optional[str] = None,
+        provenance: str = "unknown",
     ) -> None:
         """Store factory metadata in memory with thread safety and update indices."""
         sub_id = subscription_id or factory.subscription_id or "default-subscription"
@@ -59,6 +193,7 @@ class MetadataRepository:
         with self._lock:
             self._factories[key] = factory
             self._last_refreshed_at[key] = now_iso
+            self._provenance[key] = provenance
             t_id = key[0]
 
             # Index pipelines
@@ -67,8 +202,19 @@ class MetadataRepository:
 
         logger.info(
             f"Stored Factory [bold white]{factory.factory_name}[/bold white] in repository "
-            f"(Tenant: {key[0]}, Pipelines: {len(factory.pipelines)}, RefreshedAt: {now_iso})"
+            f"(Tenant: {key[0]}, Pipelines: {len(factory.pipelines)}, Provenance: {provenance}, RefreshedAt: {now_iso})"
         )
+
+    def get_provenance(
+        self,
+        factory_name: str,
+        subscription_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+    ) -> str:
+        """Return the provenance tag ("arm" | "cache" | "mock" | "unknown") for a factory."""
+        key = self._normalize_key(tenant_id, subscription_id, factory_name)
+        with self._lock:
+            return self._provenance.get(key, "unknown")
 
     def get_factory(
         self,
@@ -258,7 +404,7 @@ class MetadataRepository:
             "last_refreshed_at": refreshed_at or datetime.now(timezone.utc).isoformat(),
             "tenant_id": t_id,
             "subscription_id": s_id,
-            "factory": factory.model_dump(),
+            "factory": factory.model_dump(mode="json"),
         }
 
         with open(target_file, "w", encoding="utf-8") as f:
@@ -287,8 +433,30 @@ class MetadataRepository:
             s_id = "default-subscription"
 
         factory = FactoryMetadata.model_validate(factory_data)
-        self.save_factory(factory, tenant_id=t_id, subscription_id=s_id, last_refreshed_at=last_refreshed)
+        self.save_factory(factory, tenant_id=t_id, subscription_id=s_id, last_refreshed_at=last_refreshed, provenance="cache")
         return factory
+
+    def load_cached_factories(self) -> list[FactoryMetadata]:
+        """Restore every factory cache file under cache_root into the repository."""
+        loaded: list[FactoryMetadata] = []
+        if not self.cache_root.exists():
+            return loaded
+        for file_path in sorted(self.cache_root.rglob("*.json")):
+            try:
+                factory = self.load_from_cache(file_path)
+                loaded.append(factory)
+                logger.info(f"Restored factory '{factory.factory_name}' from cache: {file_path}")
+            except Exception as exc:
+                logger.warning(f"Could not load cache file {file_path}: {exc}")
+        return loaded
+
+    def factory_full_context_markdown(self, factory_name: str, subscription_id: Optional[str] = None,
+                                      tenant_id: Optional[str] = None) -> str:
+        """Render the FULL metadata for a stored factory as an LLM context block."""
+        factory = self.get_factory(factory_name, subscription_id=subscription_id, tenant_id=tenant_id)
+        if not factory:
+            return ""
+        return render_factory_full_context(factory)
 
     def preload_defaults(self) -> None:
         """Preload mock fixture or cached live metadata into repository on startup."""
@@ -308,6 +476,7 @@ class MetadataRepository:
                     tenant_id="default-tenant",
                     subscription_id="60a58917-1a0c-4902-a24d-ab97dd75f0ab",
                     last_refreshed_at=datetime.now(timezone.utc).isoformat(),
+                    provenance="mock",
                 )
             logger.info("Successfully preloaded default mock ADF factory into MetadataRepository.")
         except Exception as e:

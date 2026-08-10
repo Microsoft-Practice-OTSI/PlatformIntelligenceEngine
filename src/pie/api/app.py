@@ -26,6 +26,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for startup data preloading and graceful shutdown."""
     logger.info("Initializing PIE Core Platform Engine & In-Memory Repository...")
     repo = get_repository()
+    cached = repo.load_cached_factories()
+    logger.info(f"Restored {len(cached)} factory instance(s) from disk cache.")
     logger.info(f"PIE Ready: Preloaded {len(repo.list_factories())} factory instance(s) in-memory.")
     # Start persistent OAuth2 callback server on :8100
     print(">>> LIFESPAN: Calling start_callback_server <<<")
