@@ -130,3 +130,36 @@ def test_pie_reasoning_engine_end_to_end(ai_test_factory):
     resp_search = engine.ask("Find all onprem csv datasets")
     assert resp_search.detected_intent == QueryIntent.SEARCH
     assert "DS_OnPrem_Customer_Csv" in resp_search.response_markdown
+
+
+def test_how_many_pipelines_with_punctuation(ai_test_factory):
+    """Trailing punctuation must not defeat stop-word filtering (regression: 'there?').
+
+    'how many pipelines are there?' must fall through to the inventory/count branch
+    instead of being treated as a keyword filter for 'there?' (which matched 0).
+    """
+    graph = KnowledgeGraphBuilder.build(ai_test_factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("how many pipelines are there?")
+    assert resp.detected_intent == QueryIntent.GENERAL
+    assert "Pipeline Inventory" in resp.response_markdown
+    assert "Pipeline Count" in resp.response_markdown
+    assert "PL_Customer_Ingestion" in resp.response_markdown
+    assert "Matching Pipelines" not in resp.response_markdown
+
+
+def test_how_many_filter_pipelines_with_punctuation(ai_test_factory):
+    """A real keyword filter should still be extracted despite trailing punctuation."""
+    graph = KnowledgeGraphBuilder.build(ai_test_factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("how many coupa pipelines are there?")
+    assert resp.detected_intent == QueryIntent.GENERAL
+    assert "PIE - Pipeline Search" in resp.response_markdown
+    assert "Matching Pipelines: 0" in resp.response_markdown
+
+    resp2 = engine.ask("how many Customer pipelines are there?")
+    assert "PIE - Pipeline Search" in resp2.response_markdown
+    assert "Matching Pipelines: 1" in resp2.response_markdown
+    assert "PL_Customer_Ingestion" in resp2.response_markdown
