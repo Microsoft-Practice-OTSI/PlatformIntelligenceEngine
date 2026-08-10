@@ -23,7 +23,13 @@ export default {
         },
         border: {
           color: '#2e3347'
-        }
+        },
+        status: {
+          success: '#10b981',
+          warning: '#f59e0b',
+          error: '#ef4444',
+          info: '#3b82f6',
+        },
       }
     },
   },

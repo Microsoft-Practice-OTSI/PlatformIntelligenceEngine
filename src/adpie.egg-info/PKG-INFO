@@ -20,3 +20,90 @@ Provides-Extra: dev
 Requires-Dist: pytest>=7.4.0; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
 Requires-Dist: httpx>=0.27.0; extra == "dev"
+
+# ADPIE - Platform Intelligence Engine
+
+## Quick Start
+
+### Backend (FastAPI)
+
+```powershell
+cd d:\Gravity\ADPIE
+
+# Create and activate a virtual environment (first time only)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# Install dependencies (first time only)
+pip install -r requirements.txt
+
+# Start the backend
+uvicorn pie.api.app:app --reload --host 0.0.0.0 --port 8000
+```
+
+> **Important:** Always activate the virtual environment (`.venv\Scripts\Activate.ps1`) before running `pip install` or `uvicorn`.
+> If you get `uvicorn: The term 'uvicorn' is not recognized`, the venv is not active (or packages were installed into the global Python instead of the venv).
+> If activation is not desired, run directly via the venv Python instead:
+> ```powershell
+> .venv\Scripts\python.exe -m uvicorn pie.api.app:app --reload --host 0.0.0.0 --port 8000
+> ```
+
+The API will be available at `http://localhost:8000`
+API docs at `http://localhost:8000/docs`
+
+### Frontend (React + Vite)
+
+```bash
+cd d:\Gravity\ADPIE\frontend
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173` (default Vite port)
+
+## Project Structure
+
+```
+ADPIE/
+├── src/pie/           # Backend source code
+│   ├── api/           # FastAPI application
+│   ├── auth/          # Authentication modules
+│   ├── teams/         # Teams integration
+│   └── ...
+├── frontend/          # React frontend
+│   ├── src/
+│   └── ...
+├── tests/             # Test suite
+├── Documentation/     # Project documentation
+└── spikes/            # Experimental spikes
+```
+
+## Requirements
+
+- Python 3.11+
+- Node.js 18+
+- uv or pip for Python dependencies
+- npm for Node dependencies
+
+## Install Dependencies
+
+### Backend
+```powershell
+cd d:\Gravity\ADPIE
+
+# Create the virtual environment (first time only)
+python -m venv .venv
+
+# Activate it (PowerShell). On the venv working, run uvicorn from here.
+.venv\Scripts\Activate.ps1
+
+# Install dependencies (with the venv active)
+pip install -r requirements.txt
+# or with uv
+uv pip install -r requirements.txt
+```
+
+### Frontend
+```bash
+cd d:\Gravity\ADPIE\frontend
+npm install
+```

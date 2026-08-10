@@ -30,6 +30,13 @@ from pie.ai.prompts import (
 
 logger = get_logger(__name__)
 
+_PUNCT_TO_STRIP = "?!.,;:'\"()[]{}<>"
+
+
+def _clean_token(token: str) -> str:
+    """Strip trailing/leading punctuation so stop-word matching is not defeated by '?' or '.'."""
+    return token.strip(_PUNCT_TO_STRIP)
+
 
 class PIEReasoningEngine:
     """Enterprise AI Reasoning Engine for Azure Data Factory platform intelligence."""
@@ -150,7 +157,8 @@ class PIEReasoningEngine:
             if "pipeline" in q_lower and not file_type and not connectivity:
                 stop_words = {"find", "search", "list", "show", "all", "pipeline", "pipelines",
                               "the", "a", "an", "in", "of", "for", "with", "my", "any"}
-                kw = next((w for w in q_lower.split() if w not in stop_words and len(w) > 2), None)
+                words = [_clean_token(w) for w in q_lower.split()]
+                kw = next((w for w in words if w not in stop_words and len(w) > 2), None)
                 all_pipelines = [node.name for node in self.graph.nodes.values() if node.type.value == "Pipeline"]
                 matched = [p for p in all_pipelines if kw and kw in p.lower()] if kw else all_pipelines
                 res_lines = [
@@ -251,7 +259,8 @@ class PIEReasoningEngine:
                               "the", "list", "show", "me", "find", "what", "which", "a", "an",
                               "in", "of", "for", "with", "my", "this", "that", "is", "do", "does"}
                 filter_kw = next(
-                    (w for w in q_lower.split() if w not in stop_words and len(w) > 2),
+                    (w for w in (_clean_token(w) for w in q_lower.split())
+                     if w not in stop_words and len(w) > 2),
                     None
                 )
                 if filter_kw:

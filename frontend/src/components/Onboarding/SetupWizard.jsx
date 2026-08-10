@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Database, Loader2, CheckCircle2 } from 'lucide-react';
+import { Server, Database, FolderOpen, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 
 export default function SetupWizard({ onComplete }) {
@@ -210,7 +210,6 @@ export default function SetupWizard({ onComplete }) {
                   >
                     <div>
                       <div className="font-medium">{sub.subscription_name}</div>
-                      <div className="text-xs text-text-secondary mt-1">ID: {sub.subscription_id}</div>
                     </div>
                     <div className="w-6 h-6 rounded-full border border-border-color group-hover:border-accent-primary flex items-center justify-center">
                        <div className="w-3 h-3 rounded-full bg-accent-primary opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -228,10 +227,18 @@ export default function SetupWizard({ onComplete }) {
              <div className="flex items-center gap-2 mb-6 cursor-pointer text-text-secondary hover:text-text-primary" onClick={() => setStep(1)}>
                 ← Back to Subscriptions
              </div>
-            <h3 className="text-lg font-medium flex items-center gap-2 mb-4">
+            <h3 className="text-lg font-medium flex items-center gap-2 mb-3">
               <Database className="text-accent-primary" size={20} />
               2. Select Data Factory
             </h3>
+            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 mb-4 px-3 py-2 rounded-lg bg-bg-base border border-border-color">
+              <div className="flex items-center gap-2">
+                <Server size={14} className="text-status-success shrink-0" />
+                <span className="text-sm text-text-secondary">Subscription</span>
+              </div>
+              <span className="text-text-secondary">:</span>
+              <span className="text-sm font-medium text-status-success">{selectedSub?.subscription_name}</span>
+            </div>
             {loading ? (
               <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin text-accent-primary" /></div>
             ) : (
@@ -242,9 +249,20 @@ export default function SetupWizard({ onComplete }) {
                     onClick={() => handleFactorySelect(f)}
                     className="p-4 rounded-lg border border-border-color bg-bg-base hover:border-accent-primary hover:bg-bg-surface-elevated transition-all flex items-center justify-between text-left group"
                   >
-                    <div>
-                      <div className="font-medium">{f.factory_name}</div>
-                      <div className="text-xs text-text-secondary mt-1">{f.resource_group}</div>
+                    <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Database size={14} className="text-accent-primary shrink-0" />
+                        <span className="text-sm text-text-secondary">Data Factory</span>
+                      </div>
+                      <span className="text-text-secondary">:</span>
+                      <span className="text-sm font-medium text-accent-primary">{f.factory_name}</span>
+
+                      <div className="flex items-center gap-2">
+                        <FolderOpen size={14} className="text-status-info shrink-0" />
+                        <span className="text-sm text-text-secondary">Resource Group</span>
+                      </div>
+                      <span className="text-text-secondary">:</span>
+                      <span className="text-sm font-medium text-status-info">{f.resource_group}</span>
                     </div>
                     <div className="w-6 h-6 rounded-full border border-border-color group-hover:border-accent-primary flex items-center justify-center">
                        <div className="w-3 h-3 rounded-full bg-accent-primary opacity-0 group-hover:opacity-100 transition-opacity" />
