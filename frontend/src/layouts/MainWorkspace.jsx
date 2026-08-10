@@ -8,8 +8,8 @@ import Sidebar from '../components/Sidebar/Sidebar';
 export default function MainWorkspace() {
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [selectedModel, setSelectedModel] = useState(() => {
-    // Load model selection from localStorage, default to 'azure-openai'
-    return localStorage.getItem('selected_model') || 'azure-openai';
+    // Load model selection from localStorage, default to 'nvidia-nim'
+    return localStorage.getItem('selected_model') || 'nvidia-nim';
   });
 
   // Persist model selection to localStorage whenever it changes

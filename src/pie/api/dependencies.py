@@ -12,6 +12,7 @@ from pie.graph.deletion_simulator import AssetDeletionSimulator
 from pie.graph.audit_engine import AssetAuditEngine
 from pie.context.intent_builder import MultiIntentContextBuilder
 from pie.ai.engine import PIEReasoningEngine
+from pie.ai.chat_session import ChatSessionStore, get_chat_session_store as _get_chat_session_store
 
 
 
@@ -44,7 +45,18 @@ def get_graph_repository(
     
     # Only use synced factories - no preload_defaults
     if factories:
-        return KnowledgeGraphBuilder.build(factories[0])
+        def _recency(f):
+            return repo.get_last_refreshed_at(
+                f.factory_name, subscription_id=f.subscription_id, tenant_id=tenant_id
+            ) or ""
+
+        # Prefer REAL (ARM-synced / cache-restored) factories over mock/demo ones,
+        # then pick the most recently synced so demo data can never shadow real data.
+        real = [f for f in factories if repo.get_provenance(
+            f.factory_name, subscription_id=f.subscription_id, tenant_id=tenant_id
+        ) in ("arm", "cache")]
+        candidates = real or factories
+        return KnowledgeGraphBuilder.build(max(candidates, key=_recency))
     
     # Return empty graph if no factories synced (user must sync first)
     return KnowledgeGraph(factory_name="empty")
@@ -91,4 +103,9 @@ def get_reasoning_engine(
 ) -> PIEReasoningEngine:
     """Provide unified PIE reasoning engine with provider routing."""
     return PIEReasoningEngine(graph=graph)
+
+
+def get_chat_session_store() -> ChatSessionStore:
+    """Provide the process-wide shared in-memory chat session store."""
+    return _get_chat_session_store()
 

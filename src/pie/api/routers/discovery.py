@@ -31,6 +31,26 @@ from pie.graph.models import NodeType, EdgeType
 logger = get_logger(__name__)
 
 
+def _persist_factory_to_cache(
+    repo: MetadataRepository,
+    factory_name: str,
+    subscription_id: str,
+    tenant_id: str,
+) -> None:
+    """Persist a factory to the on-disk JSON cache so metadata survives restarts.
+
+    Only REAL factories (ARM-synced or restored from cache) are written to disk.
+    Mock/demo factories are never persisted, so they cannot shadow real data.
+    """
+    if repo.get_provenance(factory_name, subscription_id=subscription_id, tenant_id=tenant_id) not in ("arm", "cache"):
+        return
+    try:
+        repo.save_to_cache(factory_name, subscription_id=subscription_id, tenant_id=tenant_id)
+        logger.info(f"Persisted factory '{factory_name}' to disk cache.")
+    except Exception as exc:
+        logger.warning(f"Failed to persist factory '{factory_name}' to disk cache: {exc}")
+
+
 router = APIRouter(prefix="", tags=["Discovery & Asset Catalog"])
 
 
@@ -234,7 +254,9 @@ async def sync_selected_factories(
                             tenant_id=tenant_id,
                             subscription_id=sub_id,
                             last_refreshed_at=now_iso,
+                            provenance="arm",
                         )
+                        _persist_factory_to_cache(repo, factory.factory_name, sub_id, tenant_id)
                         synced_factories.append(factory)
                     except Exception as exc:
                         # Network error or ARM API error - log and fall back to mock
@@ -279,7 +301,7 @@ async def sync_selected_factories(
                             triggers=template_factory.triggers[:2] if hasattr(template_factory, 'triggers') else [],
                             data_flows=template_factory.data_flows[:1] if hasattr(template_factory, 'data_flows') else [],
                         )
-                        repo.save_factory(mock_factory, tenant_id=tenant_id, subscription_id=mock_factory.subscription_id, last_refreshed_at=now_iso)
+                        repo.save_factory(mock_factory, tenant_id=tenant_id, subscription_id=mock_factory.subscription_id, last_refreshed_at=now_iso, provenance="mock")
                         synced_factories.append(mock_factory)
                         logger.info(f"Created mock factory '{factory_name}' for testing/demo purposes (ARM extraction failed or no token)")
             except Exception as e:
@@ -401,6 +423,8 @@ async def refresh_factory_metadata(
         if session and not session.is_expired:
             arm_token = session.access_token
 
+    existing_provenance = repo.get_provenance(name, subscription_id=factory.subscription_id, tenant_id=tenant_id)
+
     if arm_token:
         extractor = AdfMetadataExtractor(
             access_token=arm_token,
@@ -413,10 +437,18 @@ async def refresh_factory_metadata(
                 factory.resource_group,
                 name,
             )
+            existing_provenance = "arm"
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"ARM re-extraction failed: {exc}")
 
-    repo.save_factory(factory, tenant_id=tenant_id, subscription_id=factory.subscription_id, last_refreshed_at=new_timestamp)
+    repo.save_factory(
+        factory,
+        tenant_id=tenant_id,
+        subscription_id=factory.subscription_id,
+        last_refreshed_at=new_timestamp,
+        provenance=existing_provenance,
+    )
+    _persist_factory_to_cache(repo, factory.factory_name, factory.subscription_id, tenant_id)
 
     total_activities = sum(len(p.activities) for p in factory.pipelines)
     return FactorySummaryResponse(
