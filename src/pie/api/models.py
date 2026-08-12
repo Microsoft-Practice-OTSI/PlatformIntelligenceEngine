@@ -225,6 +225,30 @@ class CodeGenResponse(BaseModel):
     explanation: str
 
 
+class FactoryInsightsRequest(BaseModel):
+    factory_name: Optional[str] = None
+    model: str = "nvidia-nim"
+
+
+class DuplicateParameterFinding(BaseModel):
+    value: str
+    names: list[str]
+    count: int
+
+
+class FactoryInsightsResponse(BaseModel):
+    factory_name: str
+    duplicate_parameters: list[DuplicateParameterFinding] = Field(default_factory=list)
+    orphan_count: int = 0
+    orphan_pipelines: list[str] = Field(default_factory=list)
+    zero_retry_count: int = 0
+    peak_hour: Optional[str] = None
+    peak_concurrency_count: int = 0
+    narrative: str = ""
+    provider: str = "deterministic"
+    latency_ms: float = 0.0
+
+
 # --- Teams Bot Models ---
 
 class TeamsWebhookRequest(BaseModel):

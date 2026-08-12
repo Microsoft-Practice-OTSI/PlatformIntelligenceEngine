@@ -1,36 +1,38 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import { RefreshCw, Activity, Database, AlertCircle } from 'lucide-react';
+import { RefreshCw, Activity, Database, AlertCircle, ArrowLeft } from 'lucide-react';
 
 export default function DataCanvas() {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [pipeline, setPipeline] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchDemoPipeline = async () => {
+    const fetchPipeline = async () => {
       try {
         setLoading(true);
-        const { data: pipelines } = await apiClient.get('/pipelines');
-        if (pipelines && pipelines.length > 0) {
-          const target = pipelines[0].name;
-          const detailRes = await apiClient.get(`/pipelines/${target}`);
-          setPipeline(detailRes.data);
-        }
+        const factoryName = localStorage.getItem('selected_factory') || undefined;
+        const detailRes = await apiClient.get(`/pipelines/${id}`, {
+          params: factoryName ? { factory_name: factoryName } : undefined,
+        });
+        setPipeline(detailRes.data);
       } catch (err) {
-        setError(err.message);
+        setError(err.response?.data?.detail || err.message);
       } finally {
         setLoading(false);
       }
     };
-    
-    if (localStorage.getItem('x_session_token')) {
-      fetchDemoPipeline();
+
+    if (id) {
+      fetchPipeline();
     } else {
       setLoading(false);
-      setError("Please log in via the chat interface to view pipeline details.");
+      setError("No pipeline selected. Navigate to /pipeline/{name} to view pipeline details.");
     }
-  }, []);
+  }, [id]);
 
   if (loading) {
     return (
@@ -60,7 +62,25 @@ export default function DataCanvas() {
     <div className="flex flex-col h-full bg-bg-base overflow-y-auto">
       {/* Header */}
       <div className="p-6 border-b border-border-color bg-bg-surface">
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-1.5 rounded-lg border border-border-color text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors"
+              title="Back"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-color text-xs font-medium text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors"
+            >
+              <ArrowLeft size={14} />
+              Back to Pipelines
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
           <Activity className="text-accent-primary" size={24} />
           <h2 className="text-2xl font-semibold text-text-primary">{pipeline.name}</h2>
         </div>

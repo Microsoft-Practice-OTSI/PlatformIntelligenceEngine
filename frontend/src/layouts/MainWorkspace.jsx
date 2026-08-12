@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom';
 import ChatContainer from '../components/Chat/ChatContainer';
 import SetupWizard from '../components/Onboarding/SetupWizard';
 import Sidebar from '../components/Sidebar/Sidebar';
+import TopBar from '../components/TopBar';
 
 export default function MainWorkspace() {
   const [workspaceReady, setWorkspaceReady] = useState(false);
@@ -23,21 +24,26 @@ export default function MainWorkspace() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-bg-base text-text-primary">
-      
-      {/* Left Pane 1: Sidebar Settings */}
-      <Sidebar selectedModel={selectedModel} setSelectedModel={handleModelChange} />
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-bg-base text-text-primary">
 
-      {/* Left Pane 2: Chatbot / Command Center */}
-      <div className="w-[35%] h-full border-r border-border-color flex flex-col bg-bg-base">
-        <div className="flex-1 overflow-hidden relative">
-          <ChatContainer selectedModel={selectedModel} />
+      {/* Frozen top branding bar (visible across all views) */}
+      <TopBar />
+
+      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+        {/* Left Pane 1: Sidebar Settings */}
+        <Sidebar selectedModel={selectedModel} setSelectedModel={handleModelChange} />
+
+        {/* Left Pane 2: Chatbot / Command Center */}
+        <div className="w-[35%] h-full border-r border-border-color flex flex-col bg-bg-base">
+          <div className="flex-1 overflow-hidden relative">
+            <ChatContainer selectedModel={selectedModel} />
+          </div>
         </div>
-      </div>
 
-      {/* Right Pane: Dynamic Data Canvas */}
-      <div className="flex-1 h-full flex flex-col relative overflow-hidden bg-bg-base">
-        <Outlet />
+        {/* Right Pane: Dynamic Data Canvas */}
+        <div className="flex-1 h-full flex flex-col relative overflow-hidden bg-bg-base">
+          <Outlet />
+        </div>
       </div>
     </div>
   );
