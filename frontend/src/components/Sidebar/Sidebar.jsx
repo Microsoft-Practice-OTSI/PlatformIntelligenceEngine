@@ -50,17 +50,6 @@ export default function Sidebar({ selectedModel, setSelectedModel }) {
       
       {/* Top Section */}
       <div>
-        {/* Branding */}
-        <div className="flex items-center gap-3 mb-8 px-2">
-          <div className="w-10 h-10 rounded-lg bg-accent-primary flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-accent-primary/20">
-            P
-          </div>
-          <div>
-            <h1 className="font-bold text-lg text-text-primary tracking-tight">Ad-PIE</h1>
-            <p className="text-[10px] text-text-secondary uppercase tracking-wider font-semibold">Intelligence Engine</p>
-          </div>
-        </div>
-
         {/* Model Selection */}
         <div className="mb-6 relative">
           <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2 px-2 flex items-center gap-2">

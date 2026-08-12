@@ -2,10 +2,11 @@
 
 import asyncio
 import json
+import time
 from typing import AsyncGenerator, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from pie.api.models import (
@@ -14,13 +15,29 @@ from pie.api.models import (
     ChatStreamRequest,
     CodeGenRequest,
     CodeGenResponse,
+    FactoryInsightsRequest,
+    FactoryInsightsResponse,
+    DuplicateParameterFinding,
 )
-from pie.api.dependencies import get_chat_session_store, get_reasoning_engine
+from pie.api.dependencies import (
+    get_chat_session_store,
+    get_current_tenant_id,
+    get_reasoning_engine,
+)
 from pie.ai.chat_session import ChatSessionStore
-from pie.ai.engine import PIEReasoningEngine
+from pie.ai.engine import PIEReasoningEngine, BASE_SYSTEM_INSTRUCTION
 from pie.ai.models import ChatRole
+from pie.ai.providers import DeterministicMockLLMProvider
+from pie.core.logging import get_logger
+from pie.discovery.repository import get_repository
+from pie.graph.audit_engine import AssetAuditEngine
+from pie.graph.builder import KnowledgeGraphBuilder
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["AI Reasoning & Engineering Assistant"])
+
+_LLM_INSIGHTS_TIMEOUT_SECONDS = 20
 
 _STREAM_END = object()
 
@@ -127,4 +144,154 @@ async def generate_modernization_code(
         target_framework=payload.target_framework,
         generated_code=resp.response_markdown,
         explanation=f"Modernized PySpark translation for {payload.pipeline_name} based on ADF activity mappings.",
+    )
+
+
+def _deterministic_narrative(
+    factory,
+    dups: list[DuplicateParameterFinding],
+    orphan_count: int,
+    zero_retry_count: int,
+    peak_hour: Optional[str],
+    peak_concurrency_count: int,
+) -> str:
+    """Build a fully grounded fallback narrative when the LLM provider fails or times out."""
+    lines = [
+        f"**{factory.factory_name}** runs **{len(factory.pipelines)}** pipelines, "
+        f"**{len(factory.datasets)}** datasets, **{len(factory.linked_services)}** linked services, "
+        f"**{len(factory.triggers)}** triggers, and **{len(factory.global_parameters or {})}** global parameters."
+    ]
+    if dups:
+        dup_bits = "; ".join(
+            f"`{d.value}` shared by {len(d.names)} parameters ({', '.join(d.names)})"
+            for d in dups[:5]
+        )
+        lines.append(f"Duplicate global parameter values detected: {dup_bits}.")
+    if orphan_count:
+        lines.append(f"**{orphan_count} orphan pipeline(s)** are not triggered by any schedule or parent pipeline and may be dead code.")
+    if zero_retry_count:
+        lines.append(f"**{zero_retry_count} activity(ies)** run with zero retries and are fragile to transient failures.")
+    if peak_concurrency_count > 1:
+        lines.append(f"Peak schedule concurrency of **{peak_concurrency_count} pipeline(s)** at `{peak_hour}` may cause throttling.")
+    if len(lines) == 1:
+        lines.append("No critical issues detected in the current metadata.")
+    return "\n".join(lines)
+
+
+@router.post("/insights", response_model=FactoryInsightsResponse)
+async def get_factory_insights(
+    payload: FactoryInsightsRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> FactoryInsightsResponse:
+    """Return deterministic factory findings plus a grounded AI narrative.
+
+    The LLM call is bounded by a hard timeout and falls back to a deterministic
+    narrative, so this endpoint always returns promptly and never surfaces
+    a client-side timeout to the dashboard.
+    """
+    repo = get_repository()
+    factory = repo.get_factory(payload.factory_name, tenant_id=tenant_id) if payload.factory_name else None
+    if factory is None:
+        factories = repo.list_factories(tenant_id=tenant_id)
+        factory = factories[0] if factories else None
+    if factory is None:
+        raise HTTPException(status_code=404, detail="No factory synced. Complete onboarding first.")
+
+    graph = KnowledgeGraphBuilder.build(factory)
+    audit = AssetAuditEngine(graph)
+
+    # --- Deterministic findings (source of truth) ---
+    dup_findings: list[DuplicateParameterFinding] = []
+    groups: dict[str, dict] = {}
+    for pname, pdef in (factory.global_parameters or {}).items():
+        value = pdef.get("value") if isinstance(pdef, dict) else pdef
+        val = str(value or "").strip()
+        if not val:
+            continue
+        group = groups.setdefault(val.lower(), {"value": val, "names": []})
+        group["names"].append(pname)
+    for group in groups.values():
+        if len(group["names"]) > 1:
+            dup_findings.append(
+                DuplicateParameterFinding(value=group["value"], names=group["names"], count=len(group["names"]))
+            )
+
+    debt = audit.audit_technical_debt()
+    concurrency = audit.audit_schedule_concurrency()
+
+    orphan_count = debt.total_orphan_count
+    zero_retry_count = debt.total_zero_retry_count
+    peak_hour = concurrency.peak_hour
+    peak_concurrency_count = concurrency.peak_concurrency_count
+
+    # --- Compact, grounded prompt (never the full factory dump) ---
+    prompt_lines = [
+        "## FACTORY CONTEXT (100% verified Azure Data Factory metadata)",
+        f"- **Factory:** `{factory.factory_name}`",
+        f"- **Resource Group:** `{factory.resource_group}`",
+        f"- **Location:** `{factory.location}`",
+        f"- **Asset Counts:** Pipelines=`{len(factory.pipelines)}`, Datasets=`{len(factory.datasets)}`, "
+        f"Linked Services=`{len(factory.linked_services)}`, Triggers=`{len(factory.triggers)}`, "
+        f"Data Flows=`{len(factory.data_flows)}`, Global Parameters=`{len(factory.global_parameters or {})}`",
+        f"- **Orphan Pipelines (never triggered):** `{orphan_count}`",
+        f"- **Zero-Retry Fragile Activities:** `{zero_retry_count}`",
+        f"- **Peak Schedule Concurrency:** `{peak_concurrency_count}` pipeline(s) at hour `{peak_hour}`",
+    ]
+    for d in dup_findings:
+        prompt_lines.append(
+            f"- **Duplicate global parameter value `{d.value}`** shared by {len(d.names)} parameters: {', '.join(d.names)}"
+        )
+    prompt_lines.append(
+        "\nWrite a concise 'Factory Insights' summary (maximum ~120 words, short bullet points). "
+        "Cover: duplicate global parameter values, orphan pipelines, fragile zero-retry activities, "
+        "schedule concurrency risks, and any quick engineering wins. "
+        "Ground every claim strictly in the FACTORY CONTEXT above. Do not invent assets, counts, or secrets."
+    )
+    prompt_payload = "\n".join(prompt_lines)
+
+    # --- Provider with hard timeout + deterministic fallback ---
+    engine = PIEReasoningEngine(graph=graph)
+    provider_label = payload.model
+    try:
+        provider = engine._resolve_llm_provider(payload.model)
+        if isinstance(provider, DeterministicMockLLMProvider):
+            provider_label = "deterministic"
+    except Exception as exc:
+        logger.warning(f"Factory insights provider init failed ({exc}); using deterministic narrative.")
+        provider = None
+        provider_label = "deterministic"
+
+    start = time.time()
+    narrative = None
+    if provider is not None and provider_label != "deterministic":
+        async def _complete() -> str:
+            return await asyncio.to_thread(
+                provider.complete,
+                prompt_payload,
+                system_prompt=BASE_SYSTEM_INSTRUCTION,
+                factory_name=factory.factory_name,
+            )
+
+        try:
+            narrative = await asyncio.wait_for(_complete(), timeout=_LLM_INSIGHTS_TIMEOUT_SECONDS)
+        except Exception as exc:
+            logger.warning(f"Factory insights LLM timed out or failed ({exc}); returning deterministic narrative.")
+    if narrative is None:
+        narrative = _deterministic_narrative(
+            factory, dup_findings, orphan_count, zero_retry_count, peak_hour, peak_concurrency_count
+        )
+        provider_label = "deterministic"
+    latency_ms = round((time.time() - start) * 1000, 1)
+
+    return FactoryInsightsResponse(
+        factory_name=factory.factory_name,
+        duplicate_parameters=dup_findings,
+        orphan_count=orphan_count,
+        orphan_pipelines=debt.orphan_pipelines,
+        zero_retry_count=zero_retry_count,
+        peak_hour=peak_hour,
+        peak_concurrency_count=peak_concurrency_count,
+        narrative=narrative,
+        provider=provider_label,
+        latency_ms=latency_ms,
     )
