@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Bot, User } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import MarkdownMessage from './MarkdownMessage';
 
 const parseSSEBlock = (raw) => {
   let eventType = 'message';
@@ -146,9 +147,13 @@ export default function ChatContainer({ selectedModel }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-text-primary mb-1">{m.role === 'user' ? 'You' : 'PIE Assistant'}</div>
-              <p className="text-[15px] whitespace-pre-wrap leading-relaxed text-text-primary">
-                {m.content}
-              </p>
+              {m.role === 'user' ? (
+                <p className="text-[15px] whitespace-pre-wrap leading-relaxed text-text-primary">
+                  {m.content}
+                </p>
+              ) : (
+                <MarkdownMessage content={m.content} />
+              )}
             </div>
           </div>
         ))}

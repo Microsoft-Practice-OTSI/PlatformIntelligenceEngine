@@ -6,6 +6,9 @@ import time
 from dataclasses import dataclass
 from typing import Generator
 from types import SimpleNamespace
+import re
+import difflib
+import json
 from pie.core.logging import get_logger
 from pie.graph.builder import KnowledgeGraph
 from pie.graph.traversal import GraphTraversalService
@@ -25,7 +28,7 @@ from pie.ai.models import (
     ChatMessage,
     ChatRole,
 )
-from pie.ai.router import QueryIntentRouter
+from pie.ai.router import QueryIntentRouter, normalize_pipeline_typos
 from pie.ai.providers import BaseLLMProvider, DeterministicMockLLMProvider, create_llm_provider
 from pie.ai.prompts import (
     DOCUMENTATION_PROMPT,
@@ -38,7 +41,98 @@ from pie.ai.prompts import (
 
 logger = get_logger(__name__)
 
+# First-structured-section markers used to cut chain-of-thought / echo preamble from LLM output.
+_EXPECTED_SECTION_STARTS = (
+    "**What this pipeline does**",
+    "## **What this pipeline does**",
+    "### What",
+    "## Platform Intelligence Engine",
+    "### Systemic Change Risk",
+    "1. **",
+)
+
+
+def _strip_reasoning_preamble(text: str) -> str:
+    """Drop chain-of-thought / echo preamble so only the final answer reaches the user.
+
+    Models occasionally begin their response by restating the task or narrating their
+    planning. If any expected section heading appears later in the output, everything
+    before it is discarded.
+    """
+    if not text:
+        return text
+
+    cut = len(text)
+    for marker in _EXPECTED_SECTION_STARTS:
+        found = text.find(marker)
+        if found != -1:
+            cut = min(cut, found)
+
+    if 0 < cut < len(text):
+        return text[cut:]
+    return text
+
+
+def _filter_reasoning_stream(chunks) -> Generator[str, None, None]:
+    """Stream-wrapper that suppresses any reasoning preamble until the answer starts.
+
+    Buffers incoming chunks; once the first expected section heading is seen, the buffer
+    (from the heading onward) is emitted and the rest streams through untouched. If no
+    heading ever appears, the buffer is flushed verbatim after a safety limit so nothing
+    is ever lost.
+    """
+    buffer = ""
+    started = False
+    for chunk in chunks:
+        if started:
+            yield chunk
+            continue
+        buffer += chunk or ""
+        cut = -1
+        for marker in _EXPECTED_SECTION_STARTS:
+            idx = buffer.find(marker)
+            if idx != -1:
+                cut = idx if cut == -1 else min(cut, idx)
+        if cut != -1:
+            tail = buffer[cut:]
+            buffer = ""
+            started = True
+            if tail:
+                yield tail
+        elif len(buffer) > 4000:
+            yield buffer
+            buffer = ""
+            started = True
+    if buffer:
+        yield buffer
+
 _PUNCT_TO_STRIP = "?!.,;:'\"()[]{}<>"
+
+_PIPELINE_SEARCH_STOP_WORDS = {
+    "find", "search", "list", "show", "all", "pipeline", "pipelines", "the", "a", "an",
+    "in", "of", "for", "with", "my", "any", "what", "are", "is", "we", "have", "there",
+    "how", "many", "which", "does", "do", "can", "you", "tell", "me", "about", "our",
+    "this", "that", "exist", "exists", "currently", "out", "up", "pipline", "piplines",
+    "give", "get", "provide", "please", "want", "need", "would", "could", "should", "know",
+    "some", "sort", "kinds", "types", "name", "names", "using", "under", "after", "before",
+}
+
+# Natural-language intent labels the LLM may emit, mapped onto the canonical QueryIntent.
+_LLM_INTENT_ALIASES = {
+    "explain": "architecture",
+    "explain_architecture": "architecture",
+    "delete": "impact",
+    "what_if": "impact",
+    "blast_radius": "impact",
+    "list": "search",
+    "find": "search",
+    "code": "code_gen",
+    "pyspark": "code_gen",
+    "security": "security_audit",
+    "audit": "security_audit",
+    "technical_debt": "security_audit",
+    "general_question": "general",
+}
 
 BASE_SYSTEM_INSTRUCTION = (
     "You are the Platform Intelligence Engine (PIE) Senior Azure Data Architect. "
@@ -221,11 +315,223 @@ class PIEReasoningEngine:
         lines.append("</conversation_history>")
         return "\n".join(lines)
 
+    def _extract_pipeline_keyword(self, query: str, prefer: str | None = None) -> str | None:
+        """Extract the filter keyword from a pipeline-list query.
+
+        Graph-aware: a token that actually appears in (or fuzzy-matches) a real pipeline
+        name always wins, so scaffold words like "give"/"provide" can never hijack the
+        filter. ``prefer`` seeds the candidate pool with an LLM-suggested keyword (e.g.
+        "railcarr x" -> "railcarr"), but it is only adopted when it matches the graph.
+        Falls back to the first non-stopword for unknown vocabulary.
+        """
+        tokens = [
+            t
+            for t in re.split(r"[^a-z0-9_-]+", normalize_pipeline_typos(query.lower()))
+            if t
+        ]
+        candidates = [
+            _clean_token(t)
+            for t in tokens
+            if _clean_token(t) not in _PIPELINE_SEARCH_STOP_WORDS and len(_clean_token(t)) > 2
+        ]
+        if prefer:
+            prefer_tokens = [
+                t
+                for t in re.split(r"[^a-z0-9_-]+", normalize_pipeline_typos(prefer.lower()))
+                if t and len(t) > 2
+            ]
+            candidates = prefer_tokens + [c for c in candidates if c not in prefer_tokens]
+        if not candidates:
+            return None
+
+        pipeline_names = [
+            node.name.lower()
+            for node in self.graph.nodes.values()
+            if node.type.value == "Pipeline"
+        ]
+        if pipeline_names:
+            for w in candidates:
+                if any(w in name or name in w for name in pipeline_names):
+                    return w
+            best_w, best_ratio = candidates[0], 0.0
+            for w in candidates:
+                for name in pipeline_names:
+                    ratio = difflib.SequenceMatcher(None, w, name).ratio()
+                    if ratio > best_ratio:
+                        best_w, best_ratio = w, ratio
+            if best_ratio >= 0.55:
+                return best_w
+        return candidates[0]
+
+    def _llm_extract_query_intent(self, query: str) -> SimpleNamespace | None:
+        """Ask the configured LLM to classify intent and extract a search keyword / target asset.
+
+        Pure intent understanding is delegated to the model; every suggested keyword or asset
+        is re-verified against the knowledge graph before rendering so listed names stay 100%
+        grounded. Returns None (-> deterministic routing) when the LLM is the mock provider,
+        is unavailable, returns malformed JSON, or reports low confidence.
+        """
+        if isinstance(self.llm, DeterministicMockLLMProvider):
+            return None
+        if not query or len(query.strip()) < 3:
+            return None
+
+        pipeline_names = sorted(
+            node.name for node in self.graph.nodes.values() if node.type.value == "Pipeline"
+        )
+        system_prompt = (
+            "You classify Azure Data Factory questions for the PIE platform. "
+            "Respond with ONLY a single JSON object - no markdown fences, no prose:\n"
+            '{"intent": "search", "search_keyword": "datex", "target_asset": null, "confidence": 0.95}\n'
+            "- intent: one of search, explain, debug, impact, codegen, audit, general\n"
+            "- search_keyword: the domain filter word when intent is search, else null\n"
+            "- target_asset: the exact asset name from the provided pipeline list if the user "
+            "references one, else null\n"
+            "- confidence: your confidence from 0.0 to 1.0"
+        )
+        prompt = (
+            f"Available pipeline names:\n"
+            + ("\n".join(f" - {name}" for name in pipeline_names) or " (none)")
+            + "\n\n"
+            f"User query: '{query}'"
+        )
+        try:
+            raw = self.llm.complete(prompt, system_prompt=system_prompt, factory_name=self.graph.factory_name)
+        except Exception as exc:
+            logger.warning(f"LLM intent extraction failed: {exc}. Using deterministic routing.")
+            return None
+
+        parsed = self._parse_intent_json(raw)
+        if not parsed:
+            return None
+
+        intent_label = str(parsed.get("intent", "general")).strip().lower()
+        intent_label = _LLM_INTENT_ALIASES.get(intent_label, intent_label)
+        try:
+            query_intent = QueryIntent(intent_label)
+        except ValueError:
+            return None
+
+        try:
+            confidence = float(parsed.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            return None
+        if confidence < 0.5:
+            return None
+
+        search_keyword = None
+        if query_intent == QueryIntent.SEARCH and parsed.get("search_keyword"):
+            kw = str(parsed["search_keyword"]).strip().lower()
+            search_keyword = kw if kw and len(kw) > 2 else None
+
+        target_asset = None
+        if parsed.get("target_asset"):
+            target_asset = self._resolve_asset_name(str(parsed["target_asset"]))
+
+        return SimpleNamespace(
+            intent=query_intent,
+            search_keyword=search_keyword,
+            target_asset=target_asset,
+        )
+
+    @staticmethod
+    def _parse_intent_json(raw: str) -> dict | None:
+        """Tolerantly parse the LLM's JSON intent response (strips markdown code fences)."""
+        if not raw:
+            return None
+        text = raw.strip()
+        fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+        if fence:
+            text = fence.group(1).strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+
+    def _resolve_asset_name(self, raw: str) -> str | None:
+        """Ground an LLM-suggested asset name: only accept names that exist in the graph."""
+        norm = raw.strip()
+        if not norm:
+            return None
+        for node in self.graph.nodes.values():
+            if node.name.lower() == norm.lower():
+                return node.name
+        return None
+
+    def _render_pipeline_search(self, keyword: str | None) -> tuple[str, list[str]]:
+        """Deterministically render a grounded pipeline listing, including similar-sounding matches."""
+        if keyword:
+            results = self.query_engine.find_pipelines_by_keyword(keyword)
+        else:
+            results = [
+                {
+                    "pipeline_name": n.name,
+                    "folder": n.folder or "Root",
+                    "match_kind": "direct",
+                    "similarity": 1.0,
+                }
+                for n in self.graph.nodes.values()
+                if n.type.value == "Pipeline"
+            ]
+
+        direct = sorted(
+            (r for r in results if r["match_kind"] == "direct"),
+            key=lambda r: r["pipeline_name"].lower(),
+        )
+        similar = sorted(
+            (r for r in results if r["match_kind"] == "similar"),
+            key=lambda r: r["similarity"],
+            reverse=True,
+        )
+
+        kw_label = keyword or "all"
+        has_results = bool(direct or similar)
+        if has_results:
+            if keyword:
+                intro = f"Here is the list of all `{keyword}` pipelines I found in `{self.graph.factory_name}`."
+            else:
+                intro = f"Here is the complete pipeline inventory for `{self.graph.factory_name}`."
+        else:
+            intro = f"I couldn't find any pipelines matching `{keyword}` in `{self.graph.factory_name}`."
+
+        lines = [
+            intro,
+            "",
+            f"## PIE - Pipeline Search: `{kw_label}`",
+            f"**Factory:** `{self.graph.factory_name}`",
+            f"**Matching Pipelines: {len(direct)}**",
+        ]
+        if direct:
+            for r in direct:
+                note = ""
+                if r.get("matched_on") and r["matched_on"] != "name":
+                    note = f" *(matched on {r['matched_on']})*"
+                lines.append(f"- `{r['pipeline_name']}`{note}")
+        else:
+            lines.append("_No matching pipelines._")
+        if similar:
+            lines.append("")
+            lines.append(f"**Similar-sounding pipelines ({len(similar)}):**")
+            lines += [f"- `{r['pipeline_name']}` *(similarity {r['similarity']})*" for r in similar]
+        if has_results:
+            lines.append("")
+            lines.append("Want me to explore any of these pipelines in detail?")
+
+        cited = [r["pipeline_name"] for r in direct + similar]
+        return "\n".join(lines), cited
+
     def _build_factory_facts_answer(self, query: str) -> ReasoningResponse | None:
         """Answer direct factory-metadata lookups deterministically without calling the LLM."""
         from pie.discovery.repository import get_repository
 
-        q_lower = query.lower()
+        q_lower = normalize_pipeline_typos(query.lower())
         factory = None
         try:
             factory = get_repository().get_factory(self.graph.factory_name)
@@ -305,26 +611,58 @@ class PIEReasoningEngine:
         self._ensure_graph_for_factory(requested_factory)
         self._resolve_llm_provider(selected_model)
 
-        intent = self.router.classify_intent(query)
-        target_asset = self.router.extract_target_asset(query)
-        cited_assets: list[str] = []
-
-        logger.info(
-            f"Processing query: '{query}' (Intent: {intent.value}, "
-            f"Target: {target_asset or 'None'}, Model: {selected_model})"
-        )
-
         # Direct factory-metadata lookups are answered deterministically (no LLM).
         facts_response = self._build_factory_facts_answer(query)
         if facts_response is not None:
             return PromptBundle(
-                intent=intent,
-                target_asset=target_asset,
+                intent=QueryIntent.GENERAL,
+                target_asset=None,
                 cited_assets=[],
                 prompt_payload="",
                 system_instruction=BASE_SYSTEM_INSTRUCTION,
                 deterministic_response=facts_response,
             )
+
+        single_asset_intents = {
+            QueryIntent.ARCHITECTURE,
+            QueryIntent.DEBUGGING,
+            QueryIntent.IMPACT,
+            QueryIntent.CODE_GEN,
+        }
+
+        # Deterministic routing is authoritative when it is confident. The LLM intent guide
+        # is only consulted for genuinely ambiguous queries (no intent signal, no asset, and
+        # not already a pipeline listing) so it can never hijack an explain/explore request
+        # into a search. Anything the LLM suggests is re-verified against the knowledge graph.
+        intent = self.router.classify_intent(query)
+        target_asset = self.router.extract_target_asset(query, allow_fuzzy=intent in single_asset_intents)
+        cited_assets: list[str] = []
+
+        llm_search_keyword: str | None = None
+        q_lower_norm = normalize_pipeline_typos(query.lower())
+        already_listing = (
+            ("how many" in q_lower_norm or "list" in q_lower_norm or "show" in q_lower_norm)
+            and "pipeline" in q_lower_norm
+        )
+        if intent == QueryIntent.GENERAL and target_asset is None and not already_listing:
+            llm_guide = self._llm_extract_query_intent(query)
+            if llm_guide is not None:
+                grounded_kw = self._extract_pipeline_keyword(query, prefer=llm_guide.search_keyword)
+                if llm_guide.intent == QueryIntent.SEARCH and grounded_kw:
+                    intent = QueryIntent.SEARCH
+                    llm_search_keyword = grounded_kw
+                elif llm_guide.target_asset:
+                    intent = llm_guide.intent
+                    target_asset = llm_guide.target_asset
+                logger.info(
+                    f"LLM-guided intent for '{query}': {intent.value} "
+                    f"(keyword={llm_search_keyword or 'None'}, asset={target_asset or 'None'})"
+                )
+
+        logger.info(
+            f"Processing query: '{query}' (Intent: {intent.value}, "
+            f"Target: {target_asset or 'None'}, Model: {selected_model})"
+        )
 
         factory_context = self._build_factory_context()
         history_block = self._build_history_block(history)
@@ -345,28 +683,19 @@ class PIEReasoningEngine:
 
         # Case 2: Multi-Criteria Asset Search (e.g. On-Prem CSV datasets, pipeline name search)
         elif intent == QueryIntent.SEARCH:
-            q_lower = query.lower()
+            q_lower = normalize_pipeline_typos(query.lower())
             file_type = "csv" if "csv" in q_lower else ("parquet" if "parquet" in q_lower else None)
             connectivity = "onprem" if ("onprem" in q_lower or "on-prem" in q_lower) else None
 
-            # Pipeline keyword search (e.g. "find coupa pipelines", "search sap pipelines")
-            if "pipeline" in q_lower and not file_type and not connectivity:
-                stop_words = {"find", "search", "list", "show", "all", "pipeline", "pipelines",
-                              "the", "a", "an", "in", "of", "for", "with", "my", "any"}
-                words = [_clean_token(w) for w in q_lower.split()]
-                kw = next((w for w in words if w not in stop_words and len(w) > 2), None)
-                all_pipelines = [node.name for node in self.graph.nodes.values() if node.type.value == "Pipeline"]
-                matched = [p for p in all_pipelines if kw and kw in p.lower()] if kw else all_pipelines
-                res_lines = [
-                    f"## PIE - Pipeline Search: `{kw or 'all'}`",
-                    f"**Factory:** `{self.graph.factory_name}`",
-                    f"**Matching Pipelines: {len(matched)}**",
-                ]
-                res_lines += ([f"- `{name}`" for name in sorted(matched)] if matched else ["_No matching pipelines._"])
+            # Pipeline keyword search (e.g. "find coupa pipelines", "search sap pipelines",
+            # "what are the RailCarRx pipelines we have" -> lists similar-sounding matches)
+            if ("pipeline" in q_lower or llm_search_keyword) and not file_type and not connectivity:
+                kw = self._extract_pipeline_keyword(query, prefer=llm_search_keyword)
+                res_markdown, cited = self._render_pipeline_search(kw)
                 deterministic_response = ReasoningResponse(
                     user_query=query, detected_intent=intent, target_asset=None,
-                    response_markdown="\n".join(res_lines),
-                    cited_assets=matched[:10], tokens_consumed=len(matched),
+                    response_markdown=res_markdown,
+                    cited_assets=cited[:10], tokens_consumed=len(cited),
                     grounding_score=100.0, latency_ms=0.0,
                 )
             else:
@@ -447,37 +776,22 @@ class PIEReasoningEngine:
 
         # Case 6: Fallback General Overview
         else:
-            q_lower = query.lower()
+            q_lower = normalize_pipeline_typos(query.lower())
             if ("how many" in q_lower or "list" in q_lower or "show" in q_lower) and "pipeline" in q_lower:
-                all_pipelines = [node.name for node in self.graph.nodes.values() if node.type.value == "Pipeline"]
                 # Extract a keyword filter (e.g., "coupa" from "how many coupa pipelines")
-                stop_words = {"how", "many", "are", "there", "pipelines", "pipeline", "all",
-                              "the", "list", "show", "me", "find", "what", "which", "a", "an",
-                              "in", "of", "for", "with", "my", "this", "that", "is", "do", "does"}
-                filter_kw = next(
-                    (w for w in (_clean_token(w) for w in q_lower.split())
-                     if w not in stop_words and len(w) > 2),
-                    None
-                )
+                filter_kw = llm_search_keyword or self._extract_pipeline_keyword(query)
                 if filter_kw:
-                    matched = [p for p in all_pipelines if filter_kw in p.lower()]
-                    result_lines = [
-                        f"## PIE - Pipeline Search: `{filter_kw}`\n",
-                        f"**Factory:** `{self.graph.factory_name}`\n",
-                        f"**Matching Pipelines: {len(matched)}**\n",
-                    ]
-                    if matched:
-                        result_lines += [f"- `{name}`" for name in sorted(matched)]
-                    else:
-                        result_lines.append(f"_No pipelines found matching `{filter_kw}`._")
+                    res_markdown, cited = self._render_pipeline_search(filter_kw)
                     deterministic_response = ReasoningResponse(
                         user_query=query, detected_intent=intent, target_asset=None,
-                        response_markdown="\n".join(result_lines),
-                        cited_assets=matched[:10], tokens_consumed=len(matched),
+                        response_markdown=res_markdown,
+                        cited_assets=cited[:10], tokens_consumed=len(cited),
                         grounding_score=100.0, latency_ms=0.0,
                     )
                 else:
+                    all_pipelines = [node.name for node in self.graph.nodes.values() if node.type.value == "Pipeline"]
                     result_lines = [
+                        f"Here is the complete pipeline inventory for `{self.graph.factory_name}`.\n",
                         f"## Platform Intelligence Engine (PIE) - Pipeline Inventory\n",
                         f"**Factory:** `{self.graph.factory_name}`\n",
                         f"| Factory | Pipeline Count |\n|---------|----------------|\n"
@@ -486,6 +800,8 @@ class PIEReasoningEngine:
                     if all_pipelines:
                         result_lines.append("**Pipelines:**")
                         result_lines += [f"- `{name}`" for name in sorted(all_pipelines)]
+                        result_lines.append("")
+                        result_lines.append("Want me to explore any of these pipelines in detail?")
                     else:
                         result_lines.append("_No pipelines loaded. Please sync your factory first._")
                     deterministic_response = ReasoningResponse(
@@ -559,6 +875,8 @@ class PIEReasoningEngine:
                 factory_name=self.graph.factory_name,
             )
 
+        response_text = _strip_reasoning_preamble(response_text)
+
         # If deterministic search or audit, prepend the exact factual summary
         if bundle.factual_prefix:
             response_text = bundle.factual_prefix + "\n\n" + response_text
@@ -596,21 +914,21 @@ class PIEReasoningEngine:
                     for word in bundle.factual_prefix.split(" "):
                         yield {"type": "token", "token": word + " "}
                     yield {"type": "token", "token": "\n\n"}
-                for chunk in self.llm.stream_complete(
+                for chunk in _filter_reasoning_stream(self.llm.stream_complete(
                     bundle.prompt_payload,
                     system_prompt=bundle.system_instruction,
                     factory_name=self.graph.factory_name,
-                ):
+                )):
                     if chunk:
                         yield {"type": "token", "token": chunk}
         except Exception as exc:
             logger.warning(f"LLM provider failed during streaming: {exc}. Falling back to Mock Provider.")
             fallback_llm = DeterministicMockLLMProvider(LLMConfig(provider=LLMProviderType.MOCK))
-            fallback_text = fallback_llm.complete(
+            fallback_text = _strip_reasoning_preamble(fallback_llm.complete(
                 bundle.prompt_payload,
                 system_prompt=bundle.system_instruction,
                 factory_name=self.graph.factory_name,
-            )
+            ))
             for word in fallback_text.split(" "):
                 yield {"type": "token", "token": word + " "}
 

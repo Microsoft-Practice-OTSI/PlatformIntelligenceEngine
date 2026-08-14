@@ -138,3 +138,79 @@ body {
   border-radius: 0.5rem;
   padding: 1.5rem;
 }
+
+/* Markdown rendering (PIE Assistant chat) */
+.markdown-body {
+  word-wrap: break-word;
+}
+.markdown-body > * + * {
+  margin-top: 0.5rem;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { font-size: 1.25em; }
+.markdown-body h3 { font-size: 1.1em; }
+.markdown-body ul { list-style: disc; padding-left: 1.5rem; }
+.markdown-body ol { list-style: decimal; padding-left: 1.5rem; }
+.markdown-body li { margin-top: 0.25rem; }
+.markdown-body li > p { display: inline; }
+.markdown-body code {
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 0.875em;
+}
+.markdown-body :not(pre) > code {
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.375rem;
+  background-color: var(--bg-surface-elevated);
+  color: #c4b5fd;
+  border: 1px solid var(--border-color);
+}
+.markdown-body pre {
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+}
+.markdown-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+}
+.markdown-body a { color: var(--accent-primary); }
+.markdown-body a:hover { text-decoration: underline; }
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.95em;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--border-color);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+.markdown-body th {
+  background-color: var(--bg-surface-elevated);
+  font-weight: 600;
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.5rem 0;
+}
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 0.75rem 0;
+}
+.markdown-body strong { color: var(--text-primary); font-weight: 600; }
+.markdown-body em { font-style: italic; }

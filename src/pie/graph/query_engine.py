@@ -3,6 +3,8 @@ and linked services by file type (csv/parquet/json), connectivity (onprem/cloud)
 schema attributes, and storage mechanisms.
 """
 
+import difflib
+import re
 from typing import Any
 from pie.graph.models import NodeType, EdgeType, GraphNode
 from pie.graph.builder import KnowledgeGraph
@@ -113,6 +115,82 @@ class AssetQueryEngine:
             )
 
         return matches
+
+    def find_pipelines_by_keyword(
+        self,
+        keyword: str | None,
+        include_similar: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Find pipelines by partial or fuzzy keyword matching.
+
+        Two matching tiers are supported:
+        1. **direct**  - the normalized keyword appears in the pipeline's name, folder,
+                         description, or annotations. This surfaces partial references like
+                         ``RailcarRx`` -> ``RailCarRx_InvoiceLoad`` as well as metadata matches
+                         such as ``invoice`` -> a pipeline whose description mentions invoice loading.
+        2. **similar** - typo-tolerant fuzzy match (difflib) on the pipeline name so
+                         misspellings such as ``RalcarRx`` still surface the intended family.
+        """
+        kw = re.sub(r"[^a-z0-9]", "", (keyword or "").lower())
+        if len(kw) < 2:
+            return []
+
+        def _norm(value: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", value.lower())
+
+        direct: list[dict[str, Any]] = []
+        similar: list[dict[str, Any]] = []
+
+        for node in self.graph.nodes.values():
+            if node.type != NodeType.PIPELINE:
+                continue
+
+            name_norm = _norm(node.name)
+            name_tokens = [t for t in (_norm(t) for t in re.split(r"[\s_\-]+", node.name)) if len(t) >= 3]
+
+            description_norm = _norm(node.description or "")
+            folder_norm = _norm(node.folder or "")
+            annotation_norm = " ".join(_norm(a) for a in (node.annotations or []))
+
+            matched_on = None
+            if kw in name_norm or any(t.startswith(kw) or kw.startswith(t) for t in name_tokens):
+                matched_on = "name"
+            elif kw in description_norm:
+                matched_on = "description"
+            elif kw in folder_norm:
+                matched_on = "folder"
+            elif kw in annotation_norm:
+                matched_on = "annotation"
+
+            if matched_on:
+                direct.append(
+                    {
+                        "pipeline_name": node.name,
+                        "folder": node.folder or "Root",
+                        "match_kind": "direct",
+                        "matched_on": matched_on,
+                        "similarity": 1.0,
+                    }
+                )
+            elif include_similar:
+                best_score = max(
+                    [difflib.SequenceMatcher(None, kw, name_norm).ratio()]
+                    + [difflib.SequenceMatcher(None, kw, t).ratio() for t in name_tokens],
+                    default=0.0,
+                )
+                if best_score >= 0.55:
+                    similar.append(
+                        {
+                            "pipeline_name": node.name,
+                            "folder": node.folder or "Root",
+                            "match_kind": "similar",
+                            "matched_on": "name",
+                            "similarity": round(best_score, 3),
+                        }
+                    )
+
+        similar.sort(key=lambda r: r["similarity"], reverse=True)
+        return direct + similar
 
     def find_pipelines_by_criteria(
         self,
