@@ -39,17 +39,65 @@ class DeterministicMockLLMProvider(BaseLLMProvider):
         factory_display = factory_name if factory_name else "Azure Data Factory"
         
         # 1. Pipeline Overview / Architecture Question
-        if "Executive Summary" in prompt or "Executive Architectural Overview" in prompt:
-            match_pipe = re.search(r"Target Entity: `?([\w-]+)`?", prompt) or re.search(r"Target Asset: `?([\w-]+)`?", prompt)
+        if "Executive Summary" in prompt or "Executive Architectural Overview" in prompt or "How the data flows" in prompt:
+            match_pipe = (
+                re.search(r"Context: `?([\w-]+)`?", prompt)
+                or re.search(r"Target Entity: `?([\w-]+)`?", prompt)
+                or re.search(r"Target Asset: `?([\w-]+)`?", prompt)
+            )
             pipe_name = match_pipe.group(1) if match_pipe else "Data Factory Pipeline"
-            
+
+            # Narrate the actual Step sequence like a business analyst instead of canned boilerplate.
+            step_lines = re.findall(r"Step \d+: [^\n]+", prompt)
+            narration: list[str] = []
+            if step_lines:
+                for line in step_lines:
+                    step = re.match(r"Step \d+: (.*)", line)
+                    if not step:
+                        continue
+                    details = step.group(1)
+                    name_match = re.match(r"([^[]+)\[([^\]]+)\]", details)
+                    act_name = name_match.group(1).strip() if name_match else details
+                    act_type = name_match.group(2) if name_match else ""
+                    movement = re.search(r"Data Movement:([^)]+)", details)
+                    subpipe = re.search(r"SubPipe:([^,)]+)", details)
+                    sql = re.search(r"SQL:([^,)]+)", details)
+                    url = re.search(r"URL:([^,)]+)", details)
+                    if movement:
+                        src, snk = [p.strip() for p in movement.group(1).split("->")]
+                        narration.append(
+                            f"- `{act_name}` copies data from **{src}** and loads it into **{snk}**."
+                        )
+                    elif subpipe:
+                        narration.append(
+                            f"- `{act_name}` kicks off the child pipeline **{subpipe.group(1)}**."
+                        )
+                    elif "Lookup" in act_type or "ForEach" in act_type or "Web" in act_type:
+                        narration.append(
+                            f"- `{act_name}` looks up the records and, for each one, sends the data "
+                            f"to the target API/service."
+                        )
+                    elif sql or url or "Script" in act_type or "StoredProcedure" in act_type:
+                        target = sql.group(1) if sql else (url.group(1) if url else "the database")
+                        narration.append(
+                            f"- `{act_name}` updates the records in **{target}** so they are flagged "
+                            f"as processed."
+                        )
+                    else:
+                        narration.append(f"- `{act_name}` performs the **{act_type or 'next'}** step in the flow.")
+
             return (
-                f"### Architectural Overview: `{pipe_name}`\n\n"
-                f"Based on the verified **Platform Intelligence Engine (PIE)** knowledge graph for `{factory_display}`:\n\n"
-                f"1. **Core Purpose:** `{pipe_name}` is an orchestrated ETL pipeline responsible for staging, validating, and loading enterprise data.\n"
-                f"2. **Security & Authentication:** Securely pulls runtime connection tokens and API keys via **Azure Key Vault** (`WebActivity`) rather than storing plaintext credentials in ADF.\n"
-                f"3. **Data Transformation & Compute:** Executes data movement from source endpoints through staging tables before running transformation scripts and child pipelines.\n"
-                f"4. **Reliability Note:** Review retry policies across activities to ensure resilient execution under external API rate limits.\n"
+                f"### What `{pipe_name}` does\n\n"
+                f"This pipeline is part of the **{factory_display}** integration and moves enterprise "
+                f"data between business systems in a controlled sequence.\n\n"
+                f"### How the data flows through it\n\n"
+                + ("\n".join(narration) if narration else
+                   "The pipeline executes its registered activities in sequence to move and update the "
+                   "business data end to end.")
+                + f"\n\n### Business impact\n\n"
+                f"Failure of `{pipe_name}` can delay downstream reporting and leave records in the "
+                f"source systems unprocessed, so the business teams relying on this data should be "
+                f"notified as soon as a run is unhealthy."
             )
 
         # 2. What-If Deletion / Blast Radius Question

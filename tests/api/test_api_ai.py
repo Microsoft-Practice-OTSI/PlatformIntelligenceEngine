@@ -13,7 +13,8 @@ def test_ai_ask_architecture_and_impact(client: TestClient):
     data_arch = resp_arch.json()
     assert data_arch["detected_intent"] == "ARCHITECTURE"
     assert data_arch["target_asset"] == "PL_Customer_Daily_Ingestion"
-    assert "Architectural Overview" in data_arch["response_markdown"]
+    assert "PL_Customer_Daily_Ingestion" in data_arch["response_markdown"]
+    assert "does" in data_arch["response_markdown"]
     assert data_arch["grounding_score"] == 100.0
 
 
