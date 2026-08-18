@@ -51,13 +51,40 @@ class MultiIntentContextBuilder:
         sections: list[str] = []
         sections.append(f"Context: `{target_node.name}` ({target_node.type.value}) Intent:{intent.value.upper()}")
 
-        # 1. Architecture Intent
+        # 1. Architecture Intent — full pipeline walkthrough for business narrative
         if intent == ContextIntent.ARCHITECTURE:
             story = self.storyteller.explain_pipeline(target_node.name) if target_node.type == NodeType.PIPELINE else {}
             sections.append(f"### Executive Architectural Overview\nArch: {story.get('executive_summary', target_node.description or 'Asset')}")
             sections.append(f"KV: {len(story.get('auth_and_secrets', []))} secrets")
             sections.append(f"ChildPipes: {','.join(story.get('child_pipelines', [])) or 'None'}")
             sections.append(f"SaaS: {','.join(story.get('api_endpoints', [])) or 'Internal'}")
+
+            # Full activity execution sequence for step-by-step business narration
+            execution_steps = story.get("execution_steps", [])
+            if execution_steps:
+                step_lines = []
+                for step in execution_steps:
+                    step_lines.append(
+                        f"S{step['step_number']}: {step['activity_name']} [{step['type']}]"
+                        + (f" - {step['description']}" if step.get('description') else "")
+                        + (f" -> calls pipeline: {step['called_pipeline']}" if step.get('called_pipeline') else "")
+                    )
+                sections.append("### Activity Execution Sequence (IN ORDER)\n" + "\n".join(step_lines))
+
+            # Data movements (Copy source → sink)
+            data_movements = story.get("data_movements", [])
+            if data_movements:
+                sections.append("### Data Movements\n" + "\n".join(f"- {dm}" for dm in data_movements))
+
+            # SQL operations
+            sql_operations = story.get("sql_operations", [])
+            if sql_operations:
+                sections.append("### SQL / Stored Procedure Operations\n" + "\n".join(f"- {op}" for op in sql_operations))
+
+            # Data flows
+            data_flows = story.get("data_flows", [])
+            if data_flows:
+                sections.append("### Data Flows\n" + "\n".join(f"- {df}" for df in data_flows))
 
         # 2. Debugging & Troubleshooting Intent
         elif intent == ContextIntent.DEBUGGING:

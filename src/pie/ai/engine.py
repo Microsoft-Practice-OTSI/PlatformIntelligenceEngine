@@ -43,6 +43,7 @@ logger = get_logger(__name__)
 
 # First-structured-section markers used to cut chain-of-thought / echo preamble from LLM output.
 _EXPECTED_SECTION_STARTS = (
+    "**One-Line Summary**",
     "**What this pipeline does**",
     "## **What this pipeline does**",
     "### What",
