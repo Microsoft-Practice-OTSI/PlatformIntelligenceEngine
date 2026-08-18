@@ -46,7 +46,7 @@ class LLMConfig(BaseModel):
     provider: LLMProviderType = LLMProviderType.MOCK
     model: str = "gpt-4o-mini"
     temperature: float = 0.1
-    max_tokens: int = 2000
+    max_tokens: int = 4096
     api_key: str | None = None
     endpoint: str | None = None
     azure_endpoint: str | None = None

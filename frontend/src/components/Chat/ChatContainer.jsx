@@ -146,7 +146,8 @@ export default function ChatContainer({ selectedModel }) {
               {m.role === 'user' ? <User size={20} className="text-white" /> : <Bot size={20} className="text-white" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-text-primary mb-1">{m.role === 'user' ? 'You' : 'PIE Assistant'}</div>
+              {m.role === 'user' && <div className="font-semibold text-text-primary mb-1">You</div>}
+              {m.role === 'assistant' && m.content && <div className="font-semibold text-text-primary mb-1">PIE Assistant</div>}
               {m.role === 'user' ? (
                 <p className="text-[15px] whitespace-pre-wrap leading-relaxed text-text-primary">
                   {m.content}
@@ -187,7 +188,7 @@ export default function ChatContainer({ selectedModel }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage(e);
+                e.currentTarget.form.requestSubmit();
               }
             }}
           />
