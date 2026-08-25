@@ -8,8 +8,48 @@ from pie.graph.models import (
     GraphNode,
     GraphEdge,
 )
+from pie.graph.expression_analyzer import ExpressionAnalyzer
 
 logger = get_logger(__name__)
+
+
+def _extract_inner_activities(type_props: dict) -> list[dict]:
+    """Extract inner activity definitions from ForEach, IfCondition, Until, Switch, etc.
+
+    Returns a flat list of activity-like dicts with 'name', 'type', and 'typeProperties'.
+    """
+    if not isinstance(type_props, dict):
+        return []
+
+    activities: list[dict] = []
+
+    # ForEach: typeProperties.activities[]
+    for_each_acts = type_props.get("activities", [])
+    if isinstance(for_each_acts, list):
+        for act in for_each_acts:
+            if isinstance(act, dict):
+                activities.append(act)
+
+    # IfCondition: typeProperties.ifTrueActivities[] and ifFalseActivities[]
+    for branch_key in ("ifTrueActivities", "ifFalseActivities"):
+        branch_acts = type_props.get(branch_key, [])
+        if isinstance(branch_acts, list):
+            for act in branch_acts:
+                if isinstance(act, dict):
+                    activities.append(act)
+
+    # Switch: typeProps.cases[].activities[]
+    cases = type_props.get("cases", [])
+    if isinstance(cases, list):
+        for case in cases:
+            if isinstance(case, dict):
+                case_acts = case.get("activities", [])
+                if isinstance(case_acts, list):
+                    for act in case_acts:
+                        if isinstance(act, dict):
+                            activities.append(act)
+
+    return activities
 
 
 class KnowledgeGraph:
@@ -22,6 +62,7 @@ class KnowledgeGraph:
         # Adjacency maps for fast O(1) graph traversal
         self.outgoing_adj: dict[str, list[GraphEdge]] = {}
         self.incoming_adj: dict[str, list[GraphEdge]] = {}
+        self.expr_analyzer: ExpressionAnalyzer | None = None
 
     def add_node(self, node: GraphNode) -> None:
         """Add a vertex to the graph."""
@@ -94,6 +135,28 @@ class KnowledgeGraphBuilder:
                     annotations=getattr(ls, "annotations", []) or [],
                 )
             )
+
+        # 1b. Add Integration Runtime Nodes & USES_INTEGRATION_RUNTIME edges
+        ir_seen: set[str] = set()
+        for ls in factory_meta.linked_services:
+            if ls.connect_via_integration_runtime:
+                ir_name = ls.connect_via_integration_runtime
+                if ir_name not in ir_seen:
+                    ir_seen.add(ir_name)
+                    ir_node_id = f"integration_runtime:{ir_name}"
+                    graph.add_node(
+                        GraphNode(
+                            id=ir_node_id,
+                            name=ir_name,
+                            type=NodeType.INTEGRATION_RUNTIME,
+                            description=f"Integration Runtime used by linked services",
+                            properties={"type": "SelfHosted" if "self" in ir_name.lower() else "Managed"},
+                        )
+                    )
+                # LinkedService -[USES_INTEGRATION_RUNTIME]-> IntegrationRuntime
+                ls_node_id = f"linked_service:{ls.name}"
+                ir_node_id = f"integration_runtime:{ir_name}"
+                graph.add_edge(ls_node_id, ir_node_id, EdgeType.USES_INTEGRATION_RUNTIME)
 
         # 2. Add Dataset Nodes & Edges to Linked Services (Dataset -[USES]-> LinkedService)
         for ds in factory_meta.datasets:
@@ -238,6 +301,45 @@ class KnowledgeGraphBuilder:
                         )
                     graph.add_edge(act_node_id, ls_node_id, EdgeType.USES)
 
+                # ForEach / IfCondition / Until / Switch: build ITERATES_OVER / CONDITION_DEPENDS_ON edges
+                act_type_lower = act.type.lower() if act.type else ""
+                if act_type_lower in ("foreach", "ifcondition", "until", "switch"):
+                    inner_activities = _extract_inner_activities(act.type_properties)
+                    for inner_act in inner_activities:
+                        inner_name = inner_act.get("name", "unknown")
+                        inner_act_type = inner_act.get("type", "Unknown")
+                        inner_node_id = f"activity:{pipe.name}.{inner_name}"
+
+                        # Create node for inner activity if not already present
+                        if inner_node_id not in graph.nodes:
+                            graph.add_node(
+                                GraphNode(
+                                    id=inner_node_id,
+                                    name=inner_name,
+                                    type=NodeType.ACTIVITY,
+                                    description=f"Inner activity of {act.type}: {act.name}",
+                                    properties={
+                                        "pipeline_name": pipe.name,
+                                        "type": inner_act_type,
+                                        "parent_activity": act.name,
+                                    },
+                                )
+                            )
+
+                        # Create appropriate edge type
+                        if act_type_lower in ("foreach", "until"):
+                            graph.add_edge(act_node_id, inner_node_id, EdgeType.ITERATES_OVER, {
+                                "parent_type": act.type,
+                            })
+                        elif act_type_lower == "ifcondition":
+                            graph.add_edge(act_node_id, inner_node_id, EdgeType.CONDITION_DEPENDS_ON, {
+                                "parent_type": act.type,
+                            })
+                        elif act_type_lower == "switch":
+                            graph.add_edge(act_node_id, inner_node_id, EdgeType.CONDITION_DEPENDS_ON, {
+                                "parent_type": act.type,
+                            })
+
         # 4. Add Triggers & Edges (Trigger -[EXECUTES]-> Pipeline)
         for tr in factory_meta.triggers:
             tr_node_id = f"trigger:{tr.name}"
@@ -299,6 +401,30 @@ class KnowledgeGraphBuilder:
             for snk in df.sinks:
                 ds_id = f"dataset:{snk}"
                 graph.add_edge(df_node_id, ds_id, EdgeType.WRITES)
+
+        # 6. Expression-level Reference Edges (high-confidence data dependencies)
+        expr_analyzer = ExpressionAnalyzer()
+        expr_refs = expr_analyzer.analyze_factory(factory_meta)
+        graph.expr_analyzer = expr_analyzer
+        for ref in expr_refs:
+            if ref.reference_type == "OUTPUT_REFERENCE":
+                # Activity references another activity's output → REFERENCES_OUTPUT_OF
+                src_id = f"activity:{ref.source_name}" if "." in ref.source_name else f"activity:{ref.target_name.rsplit('.', 1)[0]}.{ref.source_name}"
+                tgt_id = f"activity:{ref.target_name}" if "." in ref.target_name else f"activity:{ref.target_name}"
+                if src_id in graph.nodes and tgt_id in graph.nodes:
+                    graph.add_edge(tgt_id, src_id, EdgeType.REFERENCES_OUTPUT_OF, {
+                        "expression": ref.expression,
+                        "confidence": ref.confidence.value,
+                    })
+            elif ref.reference_type == "DATASET_REFERENCE":
+                # Activity references a dataset in expression → REFERENCES
+                ds_id = f"dataset:{ref.source_name}"
+                act_id = f"activity:{ref.target_name}" if "." in ref.target_name else None
+                if ds_id in graph.nodes and act_id and act_id in graph.nodes:
+                    graph.add_edge(act_id, ds_id, EdgeType.REFERENCES, {
+                        "expression": ref.expression,
+                        "confidence": ref.confidence.value,
+                    })
 
         logger.info(
             f"[bold green][OK] Knowledge Graph Constructed:[/bold green] "

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import { RefreshCw, Activity, Database, AlertCircle, ArrowLeft } from 'lucide-react';
+import { RefreshCw, Activity, Database, AlertCircle, ArrowLeft, GitBranch } from 'lucide-react';
 
 export default function DataCanvas() {
   const { id } = useParams();
@@ -83,6 +83,13 @@ export default function DataCanvas() {
         <div className="flex items-center gap-3">
           <Activity className="text-accent-primary" size={24} />
           <h2 className="text-2xl font-semibold text-text-primary">{pipeline.name}</h2>
+          <button
+            onClick={() => navigate(`/impact-analysis/${encodeURIComponent(pipeline.name)}?type=Pipeline`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-lg border border-accent-primary/40 bg-accent-primary/10 text-accent-primary text-xs font-medium hover:bg-accent-primary/20 transition-colors"
+          >
+            <GitBranch size={13} />
+            Impact Analysis
+          </button>
         </div>
         <p className="text-text-secondary text-sm">
           Pipeline ID: {pipeline.id}

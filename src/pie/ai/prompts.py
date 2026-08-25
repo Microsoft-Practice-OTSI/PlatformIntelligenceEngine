@@ -115,3 +115,28 @@ RECOMMENDATION_PROMPT = (
     "OUTPUT CONTRACT: Respond with ONLY the finished recommendations. No preamble, planning, or notes. "
     "Do not restate the context. Begin directly with the answer.\n"
 )
+
+CHANGE_IMPACT_PROMPT = (
+    "You are a Senior Site Reliability Engineer performing a formal Change Impact Analysis.\n\n"
+    "Analyze the proposed {change_type} of `{asset_name}` ({object_type}).\n"
+    "The following evidence was gathered deterministically from the ADF knowledge graph:\n\n"
+    "{context}\n\n"
+    "Produce a structured Change Impact Analysis with these sections:\n\n"
+    "1. **Risk Level** — One of Critical/High/Medium/Low. Explain WHY in one sentence.\n"
+    "2. **Impact Summary** — How many direct/indirect/external impacts were found.\n"
+    "3. **Impact Chain** — Show the dependency chain as: A → B → C → D\n"
+    "4. **Key Evidence** — List the top 3-5 most important technical evidence items\n"
+    "   (expression references, graph edges, configuration links).\n"
+    "5. **Affected Pipelines** — List pipeline names that would be impacted.\n"
+    "6. **External Systems** — Any SaaS/API/database systems connected through this object.\n"
+    "7. **Recommendation** — What the engineer should do before proceeding.\n"
+    "8. **Why?** — A brief expandable explanation of how AdPIE arrived at this conclusion.\n\n"
+    "RULES:\n"
+    "- Ground EVERY sentence in the evidence below. Do not invent dependencies.\n"
+    "- Do not present low-confidence inferences as confirmed dependencies.\n"
+    "- If the evidence shows no significant impact, say so clearly.\n"
+    "- Never produce an unexplained risk score. Always give a reason.\n\n"
+    "OUTPUT CONTRACT: Respond with ONLY the finished analysis. No preamble, planning, "
+    "chain-of-thought, or notes about how you arrived at the answer. Begin directly with "
+    "'**Risk Level**'.\n"
+)

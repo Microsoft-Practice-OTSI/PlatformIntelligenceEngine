@@ -3,8 +3,8 @@
 import difflib
 import re
 from pie.ai.models import QueryIntent
+from pie.graph.models import NodeType, ChangeType
 from pie.graph.builder import KnowledgeGraph
-from pie.graph.models import NodeType
 
 # Tokens that never identify an asset (generic query scaffolding). Filtered out before
 # partial/fuzzy asset-name matching so "explain the invoice pipeline" targets "invoice".
@@ -153,6 +153,13 @@ class QueryIntentRouter:
             if best_score >= 2.0:
                 return best_name
 
+        # 3b. Parameter / variable name match: check if any token matches a known
+        #     parameter or variable name in pipeline metadata. This prevents fuzzy
+        #     matching from incorrectly resolving param/var names to unrelated assets.
+        pv_match = self.find_parameter_or_variable_match(query)
+        if pv_match is not None:
+            return pv_match
+
         # 4. Typo-tolerant fuzzy fallback (difflib) on normalized names and their tokens.
         best_name, best_score = None, 0.0
         for token in tokens:
@@ -172,4 +179,86 @@ class QueryIntentRouter:
 
         if best_name and best_score >= 0.6:
             return best_name
+        return None
+
+    def infer_change_type(self, query: str) -> ChangeType | None:
+        """Infer the type of change from a natural language query.
+
+        Returns the most likely ChangeType, or None if no change-type signal is detected.
+        """
+        q = normalize_pipeline_typos(query.lower())
+
+        # Order matters: more specific keywords first
+        if any(k in q for k in ["decommission", "retire", "retirement", "phase out"]):
+            return ChangeType.DECOMMISSION
+        if any(k in q for k in ["disable", "turn off", "stop", "pause", "suspend"]):
+            return ChangeType.DISABLE
+        if any(k in q for k in ["replace", "swap", "migrate", "switch to", "change to"]):
+            return ChangeType.REPLACE
+        if any(k in q for k in ["rename", "move to", "relabel"]):
+            return ChangeType.RENAME
+        if any(k in q for k in ["modify", "change", "update", "alter", "adjust"]):
+            return ChangeType.MODIFY
+        if any(k in q for k in ["delete", "remove", "drop", "eliminate", "clear"]):
+            return ChangeType.REMOVE
+        return None
+
+    def detect_object_type_hint(self, query: str) -> NodeType | None:
+        """Detect an explicit object type mention in the query."""
+        q = normalize_pipeline_typos(query.lower())
+        if "integration runtime" in q or "ir " in q:
+            return NodeType.INTEGRATION_RUNTIME
+        if "linked service" in q:
+            return NodeType.LINKED_SERVICE
+        if "data flow" in q or "dataflow" in q:
+            return NodeType.DATA_FLOW
+        if "trigger" in q:
+            return NodeType.TRIGGER
+        if "parameter" in q or "global parameter" in q:
+            return NodeType.PARAMETER
+        if "variable" in q:
+            return NodeType.VARIABLE
+        if "dataset" in q:
+            return NodeType.DATASET
+        if "activity" in q:
+            return NodeType.ACTIVITY
+        if "pipeline" in q:
+            return NodeType.PIPELINE
+        return None
+
+    def find_parameter_or_variable_match(self, query: str) -> str | None:
+        """Check if any known parameter or variable name appears in the query.
+
+        Scans all pipeline metadata parameters and variables. First checks for exact
+        token matches, then falls back to checking if the full parameter/variable name
+        (3+ chars) appears as a substring of the query text. Returns the name if found,
+        None otherwise.
+        """
+        q_lower = normalize_pipeline_typos(query.lower())
+        tokens = re.findall(r"[A-Za-z0-9_-]{3,}", q_lower)
+
+        # Collect all parameter and variable names from the graph
+        param_var_names: set[str] = set()
+        for node in self.graph.nodes.values():
+            if node.type == NodeType.PIPELINE:
+                params = node.properties.get("parameters", {})
+                variables = node.properties.get("variables", {})
+                for name in params:
+                    param_var_names.add(name)
+                for name in variables:
+                    param_var_names.add(name)
+
+        # 1. Exact token match (most confident)
+        for token in tokens:
+            t_lower = token.lower()
+            for pv_name in param_var_names:
+                if pv_name.lower() == t_lower:
+                    return pv_name
+
+        # 2. Full name substring in query (handles names with special chars that
+        #    tokenize differently, e.g. "SAP_DS_User_SecretName" in the raw query)
+        for pv_name in param_var_names:
+            if len(pv_name) >= 3 and pv_name.lower() in q_lower:
+                return pv_name
+
         return None

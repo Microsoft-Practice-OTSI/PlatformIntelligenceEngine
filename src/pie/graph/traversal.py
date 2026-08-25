@@ -40,6 +40,26 @@ class GraphTraversalService:
 
         return None
 
+    def resolve_all_matches(self, identifier: str) -> list[GraphNode]:
+        """Find all graph nodes matching the given name or ID (case-insensitive).
+
+        Returns a list of all matching GraphNode objects. Used for disambiguation
+        when multiple nodes share the same name (e.g. same activity in different pipelines).
+        """
+        matches: list[GraphNode] = []
+
+        # Exact ID match
+        if identifier in self.graph.nodes:
+            matches.append(self.graph.nodes[identifier])
+            return matches
+
+        # Case-insensitive name match — collect ALL matches
+        for node in self.graph.nodes.values():
+            if node.name.lower() == identifier.lower():
+                matches.append(node)
+
+        return matches
+
     def get_upstream_lineage(self, start_id: str, max_hops: int = 6) -> list[dict[str, Any]]:
         """Trace upstream incoming dependencies (Sources, parent pipelines, input datasets, triggers)."""
         resolved_id = self.resolve_node_id(start_id)
