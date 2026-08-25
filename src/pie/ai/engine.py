@@ -12,8 +12,10 @@ import json
 from pie.core.logging import get_logger
 from pie.graph.builder import KnowledgeGraph
 from pie.graph.traversal import GraphTraversalService
+from pie.graph.models import ChangeType, ChangeRequest, NodeType
 from pie.graph.query_engine import AssetQueryEngine
 from pie.graph.deletion_simulator import AssetDeletionSimulator
+from pie.graph.change_impact_engine import ChangeImpactEngine
 from pie.graph.audit_engine import (
     SecurityAndGovernanceAuditor,
     TechnicalDebtAndOrphanDetector,
@@ -36,7 +38,8 @@ from pie.ai.prompts import (
     TECHNICAL_SUMMARY_PROMPT,
     ARCHITECTURE_REVIEW_PROMPT,
     IMPACT_ANALYSIS_PROMPT,
-    RECOMMENDATION_PROMPT
+    RECOMMENDATION_PROMPT,
+    CHANGE_IMPACT_PROMPT,
 )
 
 logger = get_logger(__name__)
@@ -175,6 +178,7 @@ class PIEReasoningEngine:
         self.security_auditor = SecurityAndGovernanceAuditor(graph)
         self.debt_detector = TechnicalDebtAndOrphanDetector(graph)
         self.concurrency_heatmap = ScheduleConcurrencyHeatmap(graph)
+        self.change_impact_engine = ChangeImpactEngine(graph)
         self.llm = llm_provider or create_llm_provider()
 
     # ------------------------------------------------------------------
@@ -674,13 +678,194 @@ class PIEReasoningEngine:
         deterministic_response: ReasoningResponse | None = None
         system_instruction = BASE_SYSTEM_INSTRUCTION
 
-        # Case 1: What-If Deletion & Blast Radius
+        # Case 1: Change Impact Analysis (enhanced with ChangeImpactEngine)
         if intent == QueryIntent.IMPACT and target_asset:
             cited_assets.append(target_asset)
-            context_pkg = self.context_builder.build_intent_package(target_asset, intent=ContextIntent.IMPACT_ANALYSIS)
-            prompt_payload = context_header + "\n\n" + IMPACT_ANALYSIS_PROMPT.format(
-                asset_name=target_asset, context=context_pkg.full_prompt_payload_md
+
+            # Infer change type from the NL query
+            inferred_change = self.router.infer_change_type(query)
+            change_type = inferred_change or ChangeType.DELETE
+
+            # Infer object type from the query
+            obj_type_hint = self.router.detect_object_type_hint(query)
+
+            # Check if target is a parameter/variable (not a graph node)
+            target_is_param = (
+                obj_type_hint in (NodeType.PARAMETER, NodeType.VARIABLE)
+                or (target_asset not in self.graph.nodes
+                    and self.router.find_parameter_or_variable_match(query) is not None)
             )
+
+            if target_is_param:
+                # Parameter/variable impact path — uses ExpressionAnalyzer references
+                impact_result = self.change_impact_engine.analyze_parameter_impact(
+                    param_name=target_asset,
+                    change_type=change_type,
+                    query=query,
+                )
+                # Parameter names aren't graph nodes, so skip context_builder
+                # and use the deterministic analysis directly
+                impact_context = (
+                    f"DETERMINISTIC IMPACT ANALYSIS (from Knowledge Graph):\n\n"
+                    f"{impact_result.summary_md}"
+                )
+                prompt_payload = context_header + "\n\n" + CHANGE_IMPACT_PROMPT.format(
+                    asset_name=target_asset,
+                    change_type=change_type.value,
+                    object_type="Parameter/Variable",
+                    context=impact_context,
+                )
+            else:
+                # Standard graph-node impact path
+                change_request = ChangeRequest(
+                    target_object=target_asset,
+                    object_type=obj_type_hint,
+                    parent_context=None,
+                    change_type=change_type,
+                    requested_action=query,
+                    scope="ADF Factory",
+                )
+
+                # Run the deterministic Change Impact Engine
+                impact_result = self.change_impact_engine.analyze(change_request)
+
+                # If disambiguation is needed, prepend it to the summary
+                if impact_result.disambiguation:
+                    impact_context_disambiguation = (
+                        f"**Note:** {impact_result.disambiguation}\n\n"
+                        f"Analyzing the first match: `{impact_result.target['name']}` "
+                        f"({impact_result.target['objectType']})\n\n"
+                    )
+                else:
+                    impact_context_disambiguation = ""
+
+                # Build the context package for the LLM
+                context_pkg = self.context_builder.build_intent_package(target_asset, intent=ContextIntent.IMPACT_ANALYSIS)
+
+                # Combine the deterministic impact analysis with the context for AI explanation
+                impact_context = (
+                    f"{impact_context_disambiguation}"
+                    f"{context_pkg.full_prompt_payload_md}\n\n"
+                    f"---\n\n"
+                    f"DETERMINISTIC IMPACT ANALYSIS (from Knowledge Graph):\n\n"
+                    f"{impact_result.summary_md}"
+                )
+
+                prompt_payload = context_header + "\n\n" + CHANGE_IMPACT_PROMPT.format(
+                    asset_name=target_asset,
+                    change_type=change_type.value,
+                    object_type=impact_result.target.get("objectType", "Unknown"),
+                    context=impact_context,
+                )
+
+        # Case 1b: Change Impact Analysis — no specific asset named, but object type detected
+        elif intent == QueryIntent.IMPACT and not target_asset:
+            obj_type_hint = self.router.detect_object_type_hint(query)
+            if obj_type_hint is not None:
+                matching_nodes = [
+                    node for node in self.graph.nodes.values()
+                    if node.type == obj_type_hint
+                ]
+
+                if len(matching_nodes) == 0:
+                    type_label = obj_type_hint.value
+                    res_lines = [
+                        f"## Change Impact Analysis",
+                        f"No **{type_label}** objects found in factory `{self.graph.factory_name}`.",
+                    ]
+                    deterministic_response = ReasoningResponse(
+                        user_query=query, detected_intent=intent, target_asset=None,
+                        response_markdown="\n".join(res_lines),
+                        cited_assets=[], tokens_consumed=0,
+                        grounding_score=100.0, latency_ms=0.0,
+                    )
+                elif len(matching_nodes) == 1:
+                    target_asset = matching_nodes[0].name
+                    cited_assets.append(target_asset)
+                    inferred_change = self.router.infer_change_type(query)
+                    change_type = inferred_change or ChangeType.DELETE
+                    change_request = ChangeRequest(
+                        target_object=target_asset,
+                        object_type=obj_type_hint,
+                        parent_context=None,
+                        change_type=change_type,
+                        requested_action=query,
+                        scope="ADF Factory",
+                    )
+                    impact_result = self.change_impact_engine.analyze(change_request)
+                    if impact_result.disambiguation:
+                        impact_context_disambiguation = (
+                            f"**Note:** {impact_result.disambiguation}\n\n"
+                            f"Analyzing the match: `{impact_result.target['name']}` "
+                            f"({impact_result.target['objectType']})\n\n"
+                        )
+                    else:
+                        impact_context_disambiguation = ""
+                    context_pkg = self.context_builder.build_intent_package(
+                        target_asset, intent=ContextIntent.IMPACT_ANALYSIS
+                    )
+                    impact_context = (
+                        f"{impact_context_disambiguation}"
+                        f"{context_pkg.full_prompt_payload_md}\n\n"
+                        f"---\n\n"
+                        f"DETERMINISTIC IMPACT ANALYSIS (from Knowledge Graph):\n\n"
+                        f"{impact_result.summary_md}"
+                    )
+                    prompt_payload = context_header + "\n\n" + CHANGE_IMPACT_PROMPT.format(
+                        asset_name=target_asset,
+                        change_type=change_type.value,
+                        object_type=impact_result.target.get("objectType", "Unknown"),
+                        context=impact_context,
+                    )
+                else:
+                    type_label = obj_type_hint.value
+                    node_names = sorted(n.name for n in matching_nodes)
+                    res_lines = [
+                        f"## Change Impact Analysis — Which {type_label}?",
+                        f"You asked about the impact of changing a **{type_label}**, "
+                        f"but didn't specify which one. "
+                        f"I found **{len(matching_nodes)}** {type_label.lower()}s in "
+                        f"factory `{self.graph.factory_name}`:\n",
+                    ]
+                    for name in node_names:
+                        res_lines.append(f"- `{name}`")
+                    res_lines.append("")
+                    res_lines.append(
+                        "Please specify the exact name and I will run a full deterministic "
+                        "impact analysis for you."
+                    )
+                    deterministic_response = ReasoningResponse(
+                        user_query=query, detected_intent=intent, target_asset=None,
+                        response_markdown="\n".join(res_lines),
+                        cited_assets=node_names[:20], tokens_consumed=len(node_names),
+                        grounding_score=100.0, latency_ms=0.0,
+                    )
+            else:
+                # No type hint either — fall through to generic LLM
+                q_lower = normalize_pipeline_typos(query.lower())
+                verbose_keywords = [
+                    "explain", "describe", "detail", "walk me through", "walk through",
+                    "overview", "capabilities", "how does", "how do", "how is", "why",
+                    "tell me about", "elaborate", "break down", "best practice",
+                    "recommend", "feature", "analysis",
+                ]
+                is_verbose = any(k in q_lower for k in verbose_keywords)
+                if is_verbose:
+                    style = (
+                        "Answer the user's question with a clear, well-structured explanation. "
+                        "Use markdown headings and bullet points where helpful, grounding everything in the FACTORY CONTEXT."
+                    )
+                else:
+                    style = (
+                        "Answer DIRECTLY and CONCISELY. Respond in 1-3 short sentences or a compact bullet list. "
+                        "Do not write a long essay, do not list generic Azure Data Factory capabilities, "
+                        "and do not restate the FACTORY CONTEXT."
+                    )
+                prompt_payload = (
+                    context_header + "\n\n"
+                    f"## Platform Intelligence Engine (PIE) - General Platform Knowledge\n"
+                    f"User asked: '{query}'.\n{style}"
+                )
 
         # Case 2: Multi-Criteria Asset Search (e.g. On-Prem CSV datasets, pipeline name search)
         elif intent == QueryIntent.SEARCH:

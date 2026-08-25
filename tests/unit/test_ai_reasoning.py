@@ -523,3 +523,149 @@ def test_filter_reasoning_stream_drops_preamble_then_streams():
     joined = "".join(streamed)
     assert joined.startswith("**What this pipeline does**\nIt loads invoices. Done.")
     assert "We need to explain" not in joined
+
+
+# ---------------------------------------------------------------------------
+# Change Impact Disambiguation Tests
+# ---------------------------------------------------------------------------
+
+def _build_multi_trigger_factory():
+    """Factory with multiple triggers for disambiguation tests."""
+    return FactoryMetadata(
+        factory_name="adf-multi-trigger-factory",
+        resource_group="rg-test",
+        subscription_id="sub-test",
+        location="centralus",
+        pipelines=[
+            PipelineMetadata(
+                name="PL_Ingestion",
+                id="/sub/rg/test/pipelines/PL_Ingestion",
+                activities=[
+                    ActivityMetadata(name="Copy_1", type="Copy", inputs=["DS_1"]),
+                ],
+            ),
+            PipelineMetadata(
+                name="PL_Reporting",
+                id="/sub/rg/test/pipelines/PL_Reporting",
+                activities=[
+                    ActivityMetadata(name="Copy_2", type="Copy", inputs=["DS_2"]),
+                ],
+            ),
+        ],
+        datasets=[
+            DatasetMetadata(
+                name="DS_1", id="/sub/rg/test/datasets/DS_1",
+                type="AzureSqlTable", linked_service_name="LS_Sql",
+            ),
+            DatasetMetadata(
+                name="DS_2", id="/sub/rg/test/datasets/DS_2",
+                type="AzureSqlTable", linked_service_name="LS_Sql",
+            ),
+        ],
+        linked_services=[
+            LinkedServiceMetadata(
+                name="LS_Sql", id="/sub/rg/test/linkedservices/LS_Sql",
+                type="AzureSqlDatabase",
+                connection_properties={"server": "sql.database.windows.net"},
+            ),
+        ],
+        triggers=[
+            TriggerMetadata(
+                name="TR_Daily_Ingest",
+                id="/sub/rg/test/triggers/TR_Daily_Ingest",
+                type="ScheduleTrigger", runtime_state="Started",
+                recurrence_schedule="Every 1 Day(s) at 06:00 AM",
+                pipelines=["PL_Ingestion"],
+            ),
+            TriggerMetadata(
+                name="TR_Weekly_Report",
+                id="/sub/rg/test/triggers/TR_Weekly_Report",
+                type="ScheduleTrigger", runtime_state="Started",
+                recurrence_schedule="Every 1 Week(s) at Monday 08:00 AM",
+                pipelines=["PL_Reporting"],
+            ),
+            TriggerMetadata(
+                name="TR_Monthly_Archive",
+                id="/sub/rg/test/triggers/TR_Monthly_Archive",
+                type="ScheduleTrigger", runtime_state="Stopped",
+                recurrence_schedule="Every 1 Month(s) at 1st 02:00 AM",
+                pipelines=["PL_Ingestion"],
+            ),
+        ],
+        data_flows=[],
+    )
+
+
+def test_impact_disambiguation_lists_multiple_triggers():
+    """Vague IMPACT query with type hint should list all matching objects."""
+    factory = _build_multi_trigger_factory()
+    graph = KnowledgeGraphBuilder.build(factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("what happens if I disable a trigger?")
+    assert resp.detected_intent == QueryIntent.IMPACT
+    assert resp.target_asset is None
+    assert "3" in resp.response_markdown  # 3 triggers found
+    assert "TR_Daily_Ingest" in resp.response_markdown
+    assert "TR_Weekly_Report" in resp.response_markdown
+    assert "TR_Monthly_Archive" in resp.response_markdown
+    assert "Please specify" in resp.response_markdown
+    assert resp.grounding_score == 100.0
+
+
+def test_impact_disambiguation_single_match_auto_resolves():
+    """When only one object of the hinted type exists, auto-resolve to it."""
+    factory = _build_multi_trigger_factory()
+    # Remove 2 of 3 triggers so only one remains
+    factory.triggers = [t for t in factory.triggers if t.name == "TR_Daily_Ingest"]
+    graph = KnowledgeGraphBuilder.build(factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("what happens if I disable a trigger?")
+    assert resp.detected_intent == QueryIntent.IMPACT
+    assert resp.target_asset == "TR_Daily_Ingest"
+    assert len(resp.response_markdown) > 0
+    assert resp.grounding_score == 100.0
+
+
+def test_impact_disambiguation_no_type_hint_falls_through():
+    """Vague IMPACT query with no type hint should fall through to generic LLM."""
+    factory = _build_multi_trigger_factory()
+    graph = KnowledgeGraphBuilder.build(factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("what happens if I change something?")
+    assert resp.detected_intent == QueryIntent.IMPACT
+    assert resp.target_asset is None
+    # Should go to LLM (generic), not deterministic — response is non-empty
+    assert len(resp.response_markdown) > 0
+
+
+def test_impact_disambiguation_no_objects_of_type():
+    """Vague IMPACT query when no objects of the hinted type exist."""
+    factory = _build_multi_trigger_factory()
+    factory.triggers = []  # Remove all triggers
+    graph = KnowledgeGraphBuilder.build(factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("what happens if I disable a trigger?")
+    assert resp.detected_intent == QueryIntent.IMPACT
+    assert resp.target_asset is None
+    assert "No" in resp.response_markdown
+    assert "Trigger" in resp.response_markdown
+    assert "found" in resp.response_markdown
+
+
+def test_impact_disambiguation_works_for_pipelines():
+    """Vague IMPACT query with pipeline type hint should list all pipelines."""
+    factory = _build_multi_trigger_factory()
+    graph = KnowledgeGraphBuilder.build(factory)
+    engine = PIEReasoningEngine(graph)
+
+    resp = engine.ask("what if I delete a pipeline?")
+    assert resp.detected_intent == QueryIntent.IMPACT
+    assert resp.target_asset is None
+    assert "2" in resp.response_markdown  # 2 pipelines
+    assert "PL_Ingestion" in resp.response_markdown
+    assert "PL_Reporting" in resp.response_markdown
+    assert "Please specify" in resp.response_markdown

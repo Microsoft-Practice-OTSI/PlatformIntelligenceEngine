@@ -1,4 +1,4 @@
-"""Knowledge Graph, Lineage Traversal, and What-If Deletion Simulator endpoints."""
+"""Knowledge Graph, Lineage Traversal, What-If Deletion Simulator, and Change Impact Analysis endpoints."""
 
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,17 +9,24 @@ from pie.api.models import (
     SubgraphResponse,
     DeletionSimulationRequest,
     DeletionSimulationResponse,
+    ChangeImpactRequest,
+    ChangeImpactResponse,
+    ImpactFindingResponse,
+    RiskAssessmentResponse,
 )
 from pie.api.dependencies import (
     get_current_tenant_id,
     get_graph_repository,
     get_traversal_service,
     get_deletion_simulator,
+    get_change_impact_engine,
     get_meta_repository,
 )
 from pie.graph.builder import KnowledgeGraph
 from pie.graph.traversal import GraphTraversalService
 from pie.graph.deletion_simulator import AssetDeletionSimulator
+from pie.graph.change_impact_engine import ChangeImpactEngine
+from pie.graph.models import ChangeType
 from pie.discovery.repository import MetadataRepository
 
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph & Lineage Traversal"])
@@ -132,5 +139,89 @@ async def simulate_asset_deletion(
         affected_pipelines=immediate.get("impacted_pipelines", []),
         remediation_steps=report.get("remediation_plan", []),
         last_refreshed_at=refreshed_at,
+    )
+
+
+@router.post("/change-impact", response_model=ChangeImpactResponse)
+async def analyze_change_impact(
+    payload: ChangeImpactRequest,
+    engine: ChangeImpactEngine = Depends(get_change_impact_engine),
+) -> ChangeImpactResponse:
+    """Execute a full Change Impact Analysis for any supported ADF object type and change scenario."""
+    # Map string change_type to enum
+    try:
+        change_type = ChangeType(payload.change_type.upper())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported change_type '{payload.change_type}'. "
+                   f"Valid types: {', '.join(ct.value for ct in ChangeType)}",
+        )
+
+    from pie.graph.models import NodeType
+    object_type = None
+    if payload.object_type:
+        try:
+            object_type = NodeType(payload.object_type)
+        except ValueError:
+            pass
+
+    from pie.graph.models import ChangeRequest
+    request = ChangeRequest(
+        target_object=payload.target_asset,
+        object_type=object_type,
+        parent_context=payload.parent_context,
+        change_type=change_type,
+        requested_action=f"What happens if I {payload.change_type.lower()} {payload.target_asset}?",
+        scope="ADF Factory",
+    )
+
+    result = engine.analyze(request)
+
+    return ChangeImpactResponse(
+        target_name=result.target.get("name", payload.target_asset),
+        target_type=result.target.get("objectType", "Unknown"),
+        change_type=change_type.value,
+        risk=RiskAssessmentResponse(
+            level=result.risk.level,
+            score=result.risk.score,
+            reasons=result.risk.reasons,
+            scopes=[s.value for s in result.risk.scopes],
+        ),
+        direct_impacts=[
+            ImpactFindingResponse(
+                asset=f.asset,
+                asset_type=f.asset_type.value,
+                impact_type=f.impact_type,
+                relationship=f.relationship.value,
+                reason=f.reason,
+                evidence=f.evidence,
+                confidence=f.confidence.value,
+                severity=f.severity,
+            )
+            for f in result.direct_impacts
+        ],
+        indirect_impacts=[
+            ImpactFindingResponse(
+                asset=f.asset,
+                asset_type=f.asset_type.value,
+                impact_type=f.impact_type,
+                relationship=f.relationship.value,
+                reason=f.reason,
+                evidence=f.evidence,
+                confidence=f.confidence.value,
+                severity=f.severity,
+            )
+            for f in result.indirect_impacts
+        ],
+        affected_pipelines=result.affected_pipelines,
+        affected_assets=result.affected_assets,
+        external_systems=result.external_systems,
+        impact_chain=result.impact_chain,
+        confidence=result.confidence.value,
+        potential_consequences=result.potential_consequences,
+        recommendation=result.recommendation,
+        summary_md=result.summary_md,
+        disambiguation=result.disambiguation,
     )
 

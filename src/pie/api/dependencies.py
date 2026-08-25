@@ -9,6 +9,7 @@ from pie.graph.builder import KnowledgeGraph, KnowledgeGraphBuilder
 from pie.graph.traversal import GraphTraversalService
 from pie.graph.storyteller import PipelineStoryteller
 from pie.graph.deletion_simulator import AssetDeletionSimulator
+from pie.graph.change_impact_engine import ChangeImpactEngine
 from pie.graph.audit_engine import AssetAuditEngine
 from pie.context.intent_builder import MultiIntentContextBuilder
 from pie.ai.engine import PIEReasoningEngine
@@ -89,6 +90,13 @@ def get_audit_engine(
 ) -> AssetAuditEngine:
     """Provide enterprise security and governance audit engine."""
     return AssetAuditEngine(graph)
+
+
+def get_change_impact_engine(
+    graph: KnowledgeGraph = Depends(get_graph_repository),
+) -> ChangeImpactEngine:
+    """Provide Change Impact Intelligence Engine."""
+    return ChangeImpactEngine(graph)
 
 
 def get_context_builder(

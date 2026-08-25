@@ -262,3 +262,48 @@ class TeamsCardResponse(BaseModel):
     type: str = "AdaptiveCard"
     version: str = "1.4"
     card: dict[str, Any]
+
+
+# --- Change Impact Analysis Models ---
+
+class ChangeImpactRequest(BaseModel):
+    target_asset: str
+    change_type: str = "DELETE"
+    object_type: Optional[str] = None
+    parent_context: Optional[str] = None
+
+
+class ImpactFindingResponse(BaseModel):
+    asset: str
+    asset_type: str
+    impact_type: str
+    relationship: str
+    reason: str
+    evidence: list[str] = Field(default_factory=list)
+    confidence: str
+    severity: str
+
+
+class RiskAssessmentResponse(BaseModel):
+    level: str
+    score: int
+    reasons: list[str] = Field(default_factory=list)
+    scopes: list[str] = Field(default_factory=list)
+
+
+class ChangeImpactResponse(BaseModel):
+    target_name: str
+    target_type: str
+    change_type: str
+    risk: RiskAssessmentResponse
+    direct_impacts: list[ImpactFindingResponse] = Field(default_factory=list)
+    indirect_impacts: list[ImpactFindingResponse] = Field(default_factory=list)
+    affected_pipelines: list[str] = Field(default_factory=list)
+    affected_assets: list[str] = Field(default_factory=list)
+    external_systems: list[str] = Field(default_factory=list)
+    impact_chain: list[str] = Field(default_factory=list)
+    confidence: str = "HIGH"
+    potential_consequences: list[str] = Field(default_factory=list)
+    recommendation: str = ""
+    summary_md: str = ""
+    disambiguation: str | None = None
