@@ -6,31 +6,46 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
       colors: {
         bg: {
-          base: '#0f111a',
-          surface: '#181b26',
-          elevated: '#242838',
+          base: '#f8fafc',
+          surface: '#ffffff',
+          elevated: '#f1f5f9',
         },
         text: {
-          primary: '#e2e8f0',
-          secondary: '#94a3b8',
+          DEFAULT: '#0f172a',
+          primary: '#0f172a',
+          secondary: '#334155', // High contrast Slate 700 (NOT washed out gray!)
+          muted: '#475569',
         },
+        primary: '#0f172a',
+        secondary: '#334155',
         accent: {
-          primary: '#6366f1',
-          hover: '#4f46e5',
-          secondary: '#8b5cf6',
+          primary: '#2563eb',
+          hover: '#1d4ed8',
+          secondary: '#7c3aed',
         },
         border: {
-          color: '#2e3347'
+          color: '#e2e8f0',
+          DEFAULT: '#cbd5e1',
+          strong: '#94a3b8',
         },
         status: {
-          success: '#10b981',
-          warning: '#f59e0b',
-          error: '#ef4444',
-          info: '#3b82f6',
+          success: '#059669',
+          warning: '#d97706',
+          error: '#dc2626',
+          info: '#0284c7',
         },
-      }
+      },
+      boxShadow: {
+        xs: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        card: '0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.04)',
+        'card-hover': '0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04)',
+        modal: '0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.06)',
+      },
     },
   },
   plugins: [],

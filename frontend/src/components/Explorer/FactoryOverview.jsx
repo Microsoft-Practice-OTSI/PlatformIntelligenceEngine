@@ -22,14 +22,14 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 
 const STAT_CARDS = [
-  { key: 'pipeline_count', label: 'Pipelines', description: 'Total No. of Pipelines', icon: Workflow, color: 'text-accent-primary', bg: 'bg-accent-primary/10' },
-  { key: 'activity_count', label: 'Activities', description: 'Total number of activities across all pipelines', icon: Activity, color: 'text-status-info', bg: 'bg-status-info/10' },
-  { key: 'dataset_count', label: 'Datasets', description: 'Total number of datasets defined in the factory', icon: Database, color: 'text-status-success', bg: 'bg-status-success/10' },
-  { key: 'linked_service_count', label: 'Linked Services', description: 'Total number of connection definitions to external data stores', icon: Link2, color: 'text-accent-secondary', bg: 'bg-accent-secondary/10' },
-  { key: 'trigger_count', label: 'Triggers', description: 'Total number of schedule and event triggers', icon: Timer, color: 'text-status-warning', bg: 'bg-status-warning/10' },
-  { key: 'global_parameters_count', label: 'Global Params', description: 'Factory-wide parameters referenced by pipelines', icon: SlidersHorizontal, color: 'text-accent-primary', bg: 'bg-accent-primary/10' },
-  { key: 'data_flow_count', label: 'Data Flows', description: 'Total number of mapping data flows', icon: GitBranch, color: 'text-status-info', bg: 'bg-status-info/10' },
-  { key: 'orphan_count', label: 'Orphan Pipelines', description: 'Pipelines that are never triggered by any schedule or parent pipeline', icon: Trash2, color: 'text-status-error', bg: 'bg-status-error/10' },
+  { key: 'pipeline_count', label: 'Pipelines', description: 'Total No. of Pipelines', icon: Workflow, color: 'text-blue-600', bg: 'bg-blue-50 border border-blue-200/60' },
+  { key: 'activity_count', label: 'Activities', description: 'Total number of activities across all pipelines', icon: Activity, color: 'text-sky-600', bg: 'bg-sky-50 border border-sky-200/60' },
+  { key: 'dataset_count', label: 'Datasets', description: 'Total number of datasets defined in the factory', icon: Database, color: 'text-emerald-600', bg: 'bg-emerald-50 border border-emerald-200/60' },
+  { key: 'linked_service_count', label: 'Linked Services', description: 'Total number of connection definitions to external data stores', icon: Link2, color: 'text-purple-600', bg: 'bg-purple-50 border border-purple-200/60' },
+  { key: 'trigger_count', label: 'Triggers', description: 'Total number of schedule and event triggers', icon: Timer, color: 'text-amber-600', bg: 'bg-amber-50 border border-amber-200/60' },
+  { key: 'global_parameters_count', label: 'Global Params', description: 'Factory-wide parameters referenced by pipelines', icon: SlidersHorizontal, color: 'text-indigo-600', bg: 'bg-indigo-50 border border-indigo-200/60' },
+  { key: 'data_flow_count', label: 'Data Flows', description: 'Total number of mapping data flows', icon: GitBranch, color: 'text-teal-600', bg: 'bg-teal-50 border border-teal-200/60' },
+  { key: 'orphan_count', label: 'Orphan Pipelines', description: 'Pipelines that are never triggered by any schedule or parent pipeline', icon: Trash2, color: 'text-rose-600', bg: 'bg-rose-50 border border-rose-200/60' },
 ];
 
 const LIST_CONFIGS = {
@@ -302,26 +302,26 @@ export default function FactoryOverview() {
   const activeConfig = activeList ? LIST_CONFIGS[activeList] : null;
 
   return (
-    <div className="flex flex-col h-full bg-bg-base overflow-y-auto">
-      <div className="p-6 border-b border-border-color bg-bg-surface">
+    <div className="flex flex-col h-full bg-transparent overflow-y-auto">
+      <div className="p-6 border-b border-slate-200/80 bg-white/80 backdrop-blur-md shadow-xs">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-accent-primary/15 border border-accent-primary/30 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center shrink-0 shadow-xs">
               <Factory size={20} className="text-accent-primary" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold text-text-primary">
-                Factory Name: <span className="text-accent-primary">{factory.factory_name}</span>
+              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                Factory: <span className="text-accent-primary">{factory.factory_name}</span>
               </h2>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary mt-1">
-                <span className="flex items-center gap-1">
-                  <FolderGit2 size={12} /> {factory.resource_group}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs mt-1.5">
+                <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                  <FolderGit2 size={13} className="text-slate-500" /> {factory.resource_group}
                 </span>
-                <span className="flex items-center gap-1">
-                  <MapPin size={12} /> {factory.location}
+                <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                  <MapPin size={13} className="text-slate-500" /> {factory.location}
                 </span>
-                <span className="flex items-center gap-1">
-                  <RefreshCw size={12} /> Refreshed: {formatTimestamp(factory.last_refreshed_at)}
+                <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                  <RefreshCw size={13} className="text-slate-500" /> Refreshed: {formatTimestamp(factory.last_refreshed_at)}
                 </span>
               </div>
             </div>
@@ -329,9 +329,9 @@ export default function FactoryOverview() {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border-color text-sm font-medium text-text-primary hover:bg-bg-surface-elevated transition-colors disabled:opacity-50 shrink-0"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 bg-white hover:bg-slate-50 transition-all shadow-xs disabled:opacity-50 shrink-0"
           >
-            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={refreshing ? 'animate-spin text-accent-primary' : 'text-slate-600'} />
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
@@ -341,40 +341,40 @@ export default function FactoryOverview() {
         {activeConfig ? (
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-                <button onClick={closeList} className="p-1 rounded hover:bg-bg-surface-elevated transition-colors" title="Back to overview">
-                  <ArrowLeft size={18} className="text-text-secondary" />
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <button onClick={closeList} className="p-1 rounded-lg hover:bg-slate-100 transition-colors" title="Back to overview">
+                  <ArrowLeft size={18} className="text-slate-700" />
                 </button>
                 {activeConfig.title} ({listData.length})
               </h3>
               <button
                 onClick={closeList}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-color text-xs font-medium text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-xs"
               >
                 Back to Overview
               </button>
             </div>
 
             {listLoading ? (
-              <div className="flex items-center gap-2 text-text-secondary text-sm py-8 justify-center">
-                <RefreshCw className="animate-spin" size={14} />
+              <div className="flex items-center gap-2 text-slate-700 font-medium text-sm py-8 justify-center">
+                <RefreshCw className="animate-spin text-accent-primary" size={16} />
                 Loading {activeConfig.title.toLowerCase()}...
               </div>
             ) : listError ? (
-              <div className="p-6 bg-bg-surface border border-border-color rounded-lg text-status-warning text-sm">
+              <div className="p-6 bg-white border border-amber-200 rounded-2xl text-amber-800 text-sm font-medium">
                 {listError}
               </div>
             ) : listData.length === 0 ? (
-              <div className="p-6 bg-bg-surface border border-border-color rounded-lg text-text-secondary text-sm">
+              <div className="p-6 bg-white border border-slate-200 rounded-2xl text-slate-700 text-sm font-medium">
                 {activeConfig.empty}
               </div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-border-color bg-bg-surface">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
                 <table className="w-full text-left border-collapse text-sm text-text-primary">
                   <thead>
-                    <tr className="bg-bg-surface-elevated border-b border-border-color">
+                    <tr className="bg-slate-100/80 border-b border-slate-200">
                       {activeConfig.columns.map((col) => (
-                        <th key={col.key} className="p-3 font-medium text-text-secondary">{col.label}</th>
+                        <th key={col.key} className="px-4 py-3 font-bold text-xs text-slate-700 uppercase tracking-wider">{col.label}</th>
                       ))}
                     </tr>
                   </thead>
@@ -387,13 +387,13 @@ export default function FactoryOverview() {
                           onClick={detailHref ? () => navigate(detailHref) : undefined}
                           title={detailHref ? 'View pipeline detail' : undefined}
                           className={`border-b border-border-color last:border-0 transition-colors ${
-                            detailHref ? 'cursor-pointer hover:bg-bg-surface-elevated' : ''
+                            detailHref ? 'cursor-pointer hover:bg-slate-50/90' : ''
                           }`}
                         >
                           {activeConfig.columns.map((col) => (
                             <td
                               key={col.key}
-                              className={`p-3 ${col.key === 'name' && detailHref ? 'font-medium text-accent-primary' : ''}`}
+                              className={`px-4 py-3 text-slate-700 ${col.key === 'name' && detailHref ? 'font-semibold text-accent-primary' : ''}`}
                             >
                               {renderCell(col, row[col.key])}
                             </td>
@@ -420,34 +420,34 @@ export default function FactoryOverview() {
                   <div
                     key={card.key}
                     onClick={config && !orphanPending ? () => openList(card) : undefined}
-                    className={`relative group rounded-lg border border-border-color bg-bg-surface p-4 flex flex-col gap-3 transition-colors ${
+                    className={`relative group rounded-2xl border border-slate-200/80 bg-white/90 backdrop-blur-md p-5 flex flex-col gap-3 transition-all ${
                       config && !orphanPending
-                        ? 'cursor-pointer hover:border-accent-primary/60'
+                        ? 'cursor-pointer hover:border-blue-400 hover:shadow-[0_12px_28px_-6px_rgba(37,99,235,0.12),0_4px_12px_-2px_rgba(15,23,42,0.04)] hover:-translate-y-0.5'
                         : 'cursor-default'
-                    } ${orphanPending ? 'opacity-70' : ''}`}
+                    } ${orphanPending ? 'opacity-70' : ''} shadow-[0_4px_16px_rgba(15,23,42,0.03)]`}
                   >
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs px-3 py-1.5 rounded-md bg-bg-elevated border border-border-color text-xs text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-md">
                       {card.description}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         {card.label}
                       </span>
-                      <span className={`w-8 h-8 rounded-md ${card.bg} flex items-center justify-center`}>
+                      <span className={`w-8 h-8 rounded-lg ${card.bg} flex items-center justify-center shrink-0`}>
                         <card.icon size={16} className={card.color} />
                       </span>
                     </div>
                     <div className="flex items-end justify-between">
                       {orphanPending ? (
-                        <span className="flex items-center gap-2 text-sm text-text-secondary">
+                        <span className="flex items-center gap-2 text-sm text-slate-700 font-medium">
                           <RefreshCw className="animate-spin" size={18} />
                           Loading...
                         </span>
                       ) : (
-                        <span className="text-3xl font-bold text-text-primary">{value}</span>
+                        <span className="text-3xl font-black text-slate-900 tracking-tight">{value}</span>
                       )}
                       {config && !orphanPending && (
-                        <span className="text-xs text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs font-bold text-accent-primary opacity-0 group-hover:opacity-100 transition-opacity">
                           View →
                         </span>
                       )}
@@ -459,60 +459,60 @@ export default function FactoryOverview() {
 
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                   <Sparkles size={18} className="text-accent-secondary" /> Factory Insights
                 </h3>
                 <button
                   onClick={generateInsights}
                   disabled={insightsLoading}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-color text-xs font-medium text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 hover:text-slate-900 transition-all shadow-xs disabled:opacity-50"
                 >
-                  <RefreshCw size={13} className={insightsLoading ? 'animate-spin' : ''} />
+                  <RefreshCw size={13} className={insightsLoading ? 'animate-spin text-accent-primary' : ''} />
                   Regenerate
                 </button>
               </div>
 
               {insightsLoading && !insights ? (
-                <div className="p-6 bg-bg-surface border border-border-color rounded-lg flex items-center gap-2 text-text-secondary text-sm">
-                  <RefreshCw className="animate-spin" size={14} />
+                <div className="p-6 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-700 font-medium text-sm shadow-xs">
+                  <RefreshCw className="animate-spin text-accent-primary" size={15} />
                   Generating factory insights...
                 </div>
               ) : (
                 <>
-                  <div className="grid gap-2 mb-4">
+                  <div className="grid gap-2.5 mb-4">
                     {insightItems.map((item, i) => (
                       <div
                         key={i}
-                        className="flex items-start gap-2 p-3 rounded-lg bg-bg-surface border border-border-color text-sm"
+                        className="flex items-start gap-3 p-3.5 rounded-xl bg-white border border-slate-200 text-sm shadow-xs"
                       >
                         <item.icon size={16} className={`mt-0.5 shrink-0 ${item.tone}`} />
-                        <span className="text-text-primary">{item.text}</span>
+                        <span className="text-slate-900 font-medium leading-relaxed">{item.text}</span>
                       </div>
                     ))}
                   </div>
 
-                  <div className="rounded-lg border border-border-color bg-bg-surface p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                        <Bot size={14} className="text-status-success" /> AI Narrative
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        <Bot size={15} className="text-emerald-600" /> AI Narrative
                       </div>
                       {insights?.provider && (
-                        <span className="text-[10px] text-text-secondary bg-bg-base border border-border-color rounded px-2 py-0.5">
+                        <span className="text-xs font-bold text-slate-700 bg-slate-100 border border-slate-300 rounded-md px-2 py-0.5">
                           {formatProviderLabel(insights.provider)}
                         </span>
                       )}
                     </div>
                     {insightsLoading ? (
-                      <div className="flex items-center gap-2 text-text-secondary text-sm">
-                        <RefreshCw className="animate-spin" size={14} />
-                        Generating insights...
+                      <div className="flex items-center gap-2 text-slate-700 font-medium text-sm py-2">
+                        <RefreshCw className="animate-spin text-accent-primary" size={15} />
+                        Generating narrative summary...
                       </div>
                     ) : aiError ? (
-                      <p className="text-status-warning text-sm">
+                      <p className="text-amber-800 font-medium text-sm">
                         {aiError} — deterministic insights above remain valid.
                       </p>
                     ) : (
-                      <p className="text-sm text-text-primary whitespace-pre-wrap leading-relaxed">
+                      <p className="text-sm text-slate-900 font-medium whitespace-pre-wrap leading-relaxed">
                         {insights?.narrative}
                       </p>
                     )}

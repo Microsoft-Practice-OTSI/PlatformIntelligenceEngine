@@ -85,7 +85,6 @@ def _build_pkce_flow() -> dict:
         "scope": " ".join(_SCOPES),
         "state": state,
         "prompt": "select_account",
-        "domain_hint": "organizations",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
@@ -410,7 +409,6 @@ async def logout(
 
 # ---------------------------------------------------------------------------
 # HTML pages
-# ---------------------------------------------------------------------------
 def _success_page(session_token: str, user_id: str, display_name: str, tenant_id: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -418,58 +416,53 @@ def _success_page(session_token: str, user_id: str, display_name: str, tenant_id
   <meta charset="UTF-8"><title>PIE — Login Successful</title>
   <style>
     *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background:#0f1117;color:#e2e8f0;display:flex;align-items:center;
-         justify-content:center;min-height:100vh}}
-    .card{{background:#1e2130;border:1px solid #2d3748;border-radius:12px;
-           padding:40px 48px;max-width:560px;width:100%;text-align:center}}
-    .icon{{font-size:52px;margin-bottom:16px}}
-    h1{{font-size:22px;font-weight:600;color:#68d391;margin-bottom:8px}}
-    p{{color:#a0aec0;font-size:14px;margin-bottom:4px}}
-    .token-box{{margin-top:24px;background:#0f1117;border:1px solid #4a5568;
-                border-radius:8px;padding:16px;text-align:left}}
-    .label{{font-size:11px;color:#718096;text-transform:uppercase;
-            letter-spacing:1px;margin-bottom:8px}}
-    .token{{font-family:'Courier New',monospace;font-size:12px;color:#90cdf4;
-            word-break:break-all;cursor:pointer;line-height:1.5}}
-    .note{{margin-top:16px;font-size:12px;color:#718096;background:#171923;
-           border-radius:8px;padding:14px;text-align:left;line-height:1.7}}
-    .note code{{color:#fbd38d;font-family:'Courier New',monospace;font-size:11px}}
-    .badge{{display:inline-block;margin-top:12px;padding:4px 12px;
-            background:#276749;color:#9ae6b4;border-radius:20px;font-size:12px}}
+    html, body{{width:100%;height:100%;min-height:100vh;overflow:hidden}}
+    body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+         background:#f8fafc;color:#0f172a;display:flex;align-items:center;
+         justify-content:center}}
+    .card{{background:#ffffff;border:1px solid #e2e8f0;border-radius:18px;
+           padding:44px 36px;max-width:420px;width:90%;text-align:center;
+           box-shadow:0 12px 30px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+           margin:auto}}
+    .icon-wrapper{{width:60px;height:60px;margin:0 auto 18px;border-radius:16px;
+                    background:#ecfdf5;border:1px solid #a7f3d0;
+                    display:flex;align-items:center;justify-content:center;font-size:26px;color:#059669;font-weight:bold}}
+    h1{{font-size:20px;font-weight:700;color:#0f172a;margin-bottom:8px;letter-spacing:-0.4px}}
+    .user-name{{color:#0f172a;font-size:16px;font-weight:700;margin-bottom:4px}}
+    .user-id{{color:#475569;font-size:13px;font-weight:500;margin-bottom:16px;word-break:break-all}}
+    .badge{{display:inline-block;padding:5px 14px;background:#eff6ff;color:#2563eb;
+             border:1px solid #bfdbfe;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:20px}}
+    .redirect-msg{{color:#334155;font-size:13px;font-weight:500;line-height:1.5;margin-bottom:20px}}
+    .btn{{display:inline-block;padding:8px 22px;background:#f8fafc;color:#0f172a;
+          border:1px solid #cbd5e1;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}}
+    .btn:hover{{background:#f1f5f9;color:#0f172a;border-color:#94a3b8}}
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="icon">✅</div>
+    <div class="icon-wrapper">✓</div>
     <h1>Authenticated Successfully</h1>
-    <p><strong>{display_name}</strong></p>
-    <p style="color:#718096">{user_id}</p>
-    <p style="color:#718096;font-size:11px;margin-top:4px">Tenant: {tenant_id}</p>
-    <span class="badge">PIE Session Active</span>
+    <p class="user-name">{display_name}</p>
+    <p class="user-id">{user_id}</p>
+    <span class="badge">Session Connected</span>
 
-    <div class="token-box">
-      <div class="label">Session Token — click to select all</div>
-      <div class="token" onclick="sel(this)" title="Click to select">{session_token}</div>
-    </div>
-
-    <div class="note">
-      <strong>Use in all API calls:</strong><br>
-      <code>curl -H "X-Session-Token: {session_token}" \\<br>
-      &nbsp;&nbsp;&nbsp;&nbsp; http://localhost:8000/api/v1/auth/session</code><br><br>
-      You can close this window now.
-    </div>
+    <p class="redirect-msg">Returning to Platform Intelligence Engine...<br>This window will close automatically.</p>
+    <button class="btn" onclick="window.close()">Close Window</button>
   </div>
   <script>
-    function sel(el){{
-      const r=document.createRange();
-      r.selectNodeContents(el);
-      window.getSelection().removeAllRanges();
-      window.getSelection().addRange(r);
-    }}
-    // Auto-close and notify parent
-    window.opener?.postMessage({{ type: 'PIE_AUTH_SUCCESS', sessionToken: '{session_token}' }}, '*');
-    setTimeout(() => window.close(), 1500);
+    // Center popup window on the screen
+    try {{
+      const w = 560, h = 600;
+      const left = Math.max(0, Math.floor((window.screen.availWidth - w) / 2));
+      const top = Math.max(0, Math.floor((window.screen.availHeight - h) / 2));
+      window.moveTo(left, top);
+    }} catch (e) {{}}
+
+    // Notify parent window and auto-close
+    try {{
+      window.opener?.postMessage({{ type: 'PIE_AUTH_SUCCESS', sessionToken: '{session_token}' }}, '*');
+    }} catch (e) {{}}
+    setTimeout(() => window.close(), 1200);
   </script>
 </body></html>"""
 
@@ -481,24 +474,28 @@ def _error_page(error: str, description: Optional[str]) -> str:
   <meta charset="UTF-8"><title>PIE — Auth Error</title>
   <style>
     *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{font-family:-apple-system,sans-serif;background:#0f1117;color:#e2e8f0;
-         display:flex;align-items:center;justify-content:center;min-height:100vh}}
-    .card{{background:#1e2130;border:1px solid #fc8181;border-radius:12px;
-           padding:40px 48px;max-width:480px;width:100%;text-align:center}}
-    h1{{color:#fc8181;font-size:20px;margin:16px 0 8px}}
-    p{{color:#a0aec0;font-size:13px;margin-top:8px}}
-    code{{color:#fbd38d}}
+    body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+         background:#f8fafc;color:#0f172a;display:flex;align-items:center;
+         justify-content:center;min-height:100vh}}
+    .card{{background:#ffffff;border:1px solid #fee2e2;border-radius:18px;
+           padding:40px 44px;max-width:460px;width:90%;text-align:center;
+           box-shadow:0 12px 30px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04)}}
+    .icon-wrapper{{width:60px;height:60px;margin:0 auto 16px;border-radius:16px;
+                    background:#fef2f2;border:1px solid #fecaca;
+                    display:flex;align-items:center;justify-content:center;font-size:26px;color:#dc2626;font-weight:bold}}
+    h1{{color:#dc2626;font-size:18px;font-weight:700;margin-bottom:8px}}
+    p{{color:#64748b;font-size:13px;margin-top:8px;line-height:1.5}}
+    code{{background:#f1f5f9;color:#b91c1c;padding:2px 6px;border-radius:4px;font-size:12px}}
   </style>
 </head>
 <body>
   <div class="card">
-    <div style="font-size:48px">❌</div>
+    <div class="icon-wrapper">✕</div>
     <h1>Authentication Failed</h1>
     <p><code>{error}</code></p>
     <p>{description or ''}</p>
-    <p style="margin-top:20px;font-size:12px">
-      Start a new login at<br>
-      <code>POST http://localhost:8000/api/v1/auth/login</code>
+    <p style="margin-top:20px;font-size:12px;color:#94a3b8">
+      Start a new login in the PIE application.
     </p>
   </div>
 </body></html>"""

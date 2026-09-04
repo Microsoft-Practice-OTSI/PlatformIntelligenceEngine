@@ -138,37 +138,40 @@ export default function ChatContainer({ selectedModel }) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-base">
-      <div className="flex-1 overflow-y-auto px-4 py-8 flex flex-col gap-6">
+    <div className="flex flex-col h-full bg-transparent">
+      <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-5">
         {messages.map((m) => (
-          <div key={m.id} className="flex gap-4 max-w-3xl mx-auto w-full group">
-            <div className={`w-8 h-8 rounded-sm flex items-center justify-center shrink-0 ${m.role === 'user' ? 'bg-accent-secondary' : 'bg-status-success'}`}>
-              {m.role === 'user' ? <User size={20} className="text-white" /> : <Bot size={20} className="text-white" />}
+          <div key={m.id} className="flex gap-3 max-w-3xl mx-auto w-full group animate-in fade-in duration-200">
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-xs mt-0.5 ${m.role === 'user' ? 'bg-accent-primary' : 'bg-emerald-600'}`}>
+              {m.role === 'user' ? <User size={16} className="text-white" /> : <Bot size={16} className="text-white" />}
             </div>
             <div className="flex-1 min-w-0">
-              {m.role === 'user' && <div className="font-semibold text-text-primary mb-1">You</div>}
-              {m.role === 'assistant' && m.content && <div className="font-semibold text-text-primary mb-1">PIE Assistant</div>}
+              <div className="text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-2">
+                <span>{m.role === 'user' ? 'You' : 'PIE Assistant'}</span>
+              </div>
               {m.role === 'user' ? (
-                <p className="text-[15px] whitespace-pre-wrap leading-relaxed text-text-primary">
-                  {m.content}
-                </p>
+                <div className="p-4 rounded-2xl bg-blue-50/90 backdrop-blur-sm border border-blue-200/90 text-sm font-medium text-slate-900 leading-relaxed shadow-xs">
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                </div>
               ) : (
-                <MarkdownMessage content={m.content} />
+                <div className="p-5 rounded-2xl bg-white/90 backdrop-blur-md border border-slate-200/80 text-sm text-slate-900 shadow-card leading-relaxed">
+                  <MarkdownMessage content={m.content} />
+                </div>
               )}
             </div>
           </div>
         ))}
         {loading && !streamStarted && (
-          <div className="flex gap-4 max-w-3xl mx-auto w-full">
-            <div className="w-8 h-8 rounded-sm bg-status-success flex items-center justify-center shrink-0">
-              <Bot size={20} className="text-white" />
+          <div className="flex gap-3 max-w-3xl mx-auto w-full animate-in fade-in duration-200">
+            <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+              <Bot size={16} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-text-primary mb-1">PIE Assistant</div>
-              <div className="flex items-center gap-1 h-6">
-                 <div className="w-2 h-2 rounded-full bg-text-secondary animate-bounce" style={{ animationDelay: '0ms' }} />
-                 <div className="w-2 h-2 rounded-full bg-text-secondary animate-bounce" style={{ animationDelay: '150ms' }} />
-                 <div className="w-2 h-2 rounded-full bg-text-secondary animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="text-xs font-bold text-slate-800 mb-1.5">PIE Assistant</div>
+              <div className="p-3.5 rounded-2xl bg-white/90 backdrop-blur-md border border-slate-200 shadow-card flex items-center gap-1.5 h-10 w-20">
+                 <div className="w-2 h-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                 <div className="w-2 h-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                 <div className="w-2 h-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </div>
@@ -176,11 +179,11 @@ export default function ChatContainer({ selectedModel }) {
         <div ref={chatEndRef} />
       </div>
 
-      <div className="p-4 border-t border-border-color bg-bg-base">
-        <form onSubmit={sendMessage} className="relative max-w-3xl mx-auto flex items-end bg-bg-surface border border-border-color rounded-xl shadow-sm focus-within:ring-1 focus-within:ring-accent-primary focus-within:border-accent-primary overflow-hidden">
+      <div className="p-4 border-t border-slate-200/80 bg-white/80 backdrop-blur-md">
+        <form onSubmit={sendMessage} className="relative max-w-3xl mx-auto flex items-end bg-white/95 border border-slate-300 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-accent-primary/20 focus-within:border-accent-primary transition-all overflow-hidden">
           <textarea
-            className="w-full bg-transparent text-text-primary p-3 pr-12 resize-none max-h-32 min-h-[44px] focus:outline-none scrollbar-hide"
-            placeholder="Send a message to PIE..."
+            className="w-full bg-transparent text-slate-900 font-medium p-3.5 pr-12 resize-none max-h-32 min-h-[46px] focus:outline-none scrollbar-hide text-sm placeholder:text-slate-500"
+            placeholder="Ask anything about ADF pipelines, datasets, dependencies..."
             rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -195,13 +198,13 @@ export default function ChatContainer({ selectedModel }) {
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="absolute right-2 bottom-2 p-1.5 rounded-lg bg-accent-primary text-white hover:bg-accent-primary-hover transition-colors disabled:opacity-50 disabled:bg-bg-surface-elevated disabled:text-text-secondary"
+            className="absolute right-2 bottom-2 p-2.5 rounded-xl bg-accent-primary text-white hover:bg-accent-hover shadow-xs transition-colors disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400"
           >
-            <Send size={18} />
+            <Send size={15} />
           </button>
         </form>
-        <div className="text-center text-xs text-text-secondary mt-2">
-          PIE can make mistakes. Consider verifying critical configurations.
+        <div className="text-center text-xs font-medium text-slate-600 mt-2">
+          PIE Assistant indexes ADF lineage and metadata in real-time. Verify critical configs.
         </div>
       </div>
     </div>
