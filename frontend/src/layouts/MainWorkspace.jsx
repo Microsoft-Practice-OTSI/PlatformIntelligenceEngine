@@ -16,6 +16,7 @@ export default function MainWorkspace() {
     // Load model selection from localStorage, default to 'nvidia-nim'
     return localStorage.getItem('selected_model') || 'nvidia-nim';
   });
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -77,24 +78,32 @@ export default function MainWorkspace() {
 
       <div className="flex flex-1 min-h-0 w-full overflow-hidden relative z-1">
         {/* Left Pane 1: Sidebar Settings */}
-        <Sidebar 
-          selectedModel={selectedModel} 
-          setSelectedModel={handleModelChange}
-          onSwitchAccount={handleSwitchAccount}
-          onSwitchFactory={handleSwitchFactory}
-        />
+        {!isChatExpanded && (
+          <Sidebar 
+            selectedModel={selectedModel} 
+            setSelectedModel={handleModelChange}
+            onSwitchAccount={handleSwitchAccount}
+            onSwitchFactory={handleSwitchFactory}
+          />
+        )}
 
         {/* Left Pane 2: Chatbot / Command Center */}
-        <div className="w-[35%] h-full border-r border-slate-200/80 flex flex-col bg-white/40 backdrop-blur-md">
+        <div className={`${isChatExpanded ? 'flex-1' : 'w-[42%] lg:w-[38%]'} h-full border-r border-slate-200/80 flex flex-col bg-white/60 backdrop-blur-md transition-all duration-200`}>
           <div className="flex-1 overflow-hidden relative">
-            <ChatContainer selectedModel={selectedModel} />
+            <ChatContainer 
+              selectedModel={selectedModel} 
+              isExpanded={isChatExpanded}
+              onToggleExpand={() => setIsChatExpanded((prev) => !prev)}
+            />
           </div>
         </div>
 
         {/* Right Pane: Dynamic Data Canvas */}
-        <div className="flex-1 h-full flex flex-col relative overflow-hidden bg-transparent">
-          <Outlet />
-        </div>
+        {!isChatExpanded && (
+          <div className="flex-1 h-full flex flex-col relative overflow-hidden bg-transparent">
+            <Outlet />
+          </div>
+        )}
       </div>
     </div>
   );
