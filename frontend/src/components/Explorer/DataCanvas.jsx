@@ -61,19 +61,19 @@ export default function DataCanvas() {
   return (
     <div className="flex flex-col h-full bg-bg-base overflow-y-auto">
       {/* Header */}
-      <div className="p-6 border-b border-border-color bg-bg-surface">
+      <div className="p-6 border-b border-border-color bg-white shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate(-1)}
-              className="p-1.5 rounded-lg border border-border-color text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors"
+              className="p-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-xs"
               title="Back"
             >
               <ArrowLeft size={16} />
             </button>
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-color text-xs font-medium text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-xs"
             >
               <ArrowLeft size={14} />
               Back to Pipelines
@@ -81,17 +81,19 @@ export default function DataCanvas() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Activity className="text-accent-primary" size={24} />
-          <h2 className="text-2xl font-semibold text-text-primary">{pipeline.name}</h2>
+          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-accent-primary shadow-xs">
+            <Activity size={20} />
+          </div>
+          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{pipeline.name}</h2>
           <button
             onClick={() => navigate(`/impact-analysis/${encodeURIComponent(pipeline.name)}?type=Pipeline`)}
-            className="flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-lg border border-accent-primary/40 bg-accent-primary/10 text-accent-primary text-xs font-medium hover:bg-accent-primary/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-xl border border-blue-300 bg-blue-50 text-accent-primary text-xs font-bold hover:bg-blue-100 transition-colors shadow-xs"
           >
             <GitBranch size={13} />
             Impact Analysis
           </button>
         </div>
-        <p className="text-text-secondary text-sm">
+        <p className="text-slate-700 font-semibold text-xs mt-1.5 font-mono">
           Pipeline ID: {pipeline.id}
         </p>
       </div>
@@ -101,33 +103,33 @@ export default function DataCanvas() {
         
         {/* Activities Section */}
         <section>
-          <h3 className="text-lg font-semibold mb-4 border-b border-border-color pb-2 text-text-primary">Activities ({pipeline.activities?.length || 0})</h3>
-          <div className="overflow-hidden rounded-lg border border-border-color bg-bg-surface">
-            <table className="w-full text-left border-collapse text-sm text-text-primary">
+          <h3 className="text-base font-extrabold mb-3 text-slate-900">Activities ({pipeline.activities?.length || 0})</h3>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+            <table className="w-full text-left border-collapse text-sm text-slate-900">
               <thead>
-                <tr className="bg-bg-surface-elevated border-b border-border-color">
-                  <th className="p-3 font-medium text-text-secondary">Name</th>
-                  <th className="p-3 font-medium text-text-secondary">Type</th>
-                  <th className="p-3 font-medium text-text-secondary">Depends On</th>
+                <tr className="bg-slate-100/80 border-b border-slate-200">
+                  <th className="px-4 py-3 font-bold text-xs text-slate-700 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 font-bold text-xs text-slate-700 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 font-bold text-xs text-slate-700 uppercase tracking-wider">Depends On</th>
                 </tr>
               </thead>
               <tbody>
                 {pipeline.activities?.map((act, i) => (
-                  <tr key={i} className="border-b border-border-color last:border-0 hover:bg-bg-surface-elevated transition-colors">
-                    <td className="p-3 font-medium">{act.name}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-1 bg-bg-base rounded text-xs border border-border-color text-text-secondary">
+                  <tr key={i} className="border-b border-slate-200 last:border-0 hover:bg-slate-50/90 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-900">{act.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2.5 py-1 bg-slate-100 rounded-md text-xs font-semibold border border-slate-300 text-slate-800 font-mono">
                         {act.type}
                       </span>
                     </td>
-                    <td className="p-3 text-text-secondary">
-                      {act.dependsOn?.map(d => d.activity).join(', ') || '-'}
+                    <td className="px-4 py-3 text-slate-700 font-medium text-xs">
+                      {act.dependsOn?.map(d => d.activity).join(', ') || '—'}
                     </td>
                   </tr>
                 ))}
                 {(!pipeline.activities || pipeline.activities.length === 0) && (
                   <tr>
-                    <td colSpan="3" className="p-4 text-center text-text-secondary">No activities found</td>
+                    <td colSpan="3" className="p-6 text-center text-slate-600 font-medium">No activities found</td>
                   </tr>
                 )}
               </tbody>
@@ -137,11 +139,11 @@ export default function DataCanvas() {
 
         {/* Global Parameters Placeholder */}
         <section>
-          <h3 className="text-lg font-semibold mb-4 border-b border-border-color pb-2 flex items-center gap-2 text-text-primary">
-            <Database size={18} className="text-text-secondary" /> Global Parameters & Variables
+          <h3 className="text-base font-extrabold mb-3 flex items-center gap-2 text-slate-900">
+            <Database size={18} className="text-accent-primary" /> Global Parameters & Variables
           </h3>
-          <div className="p-6 bg-bg-surface border border-border-color rounded-lg text-text-secondary text-sm">
-            <p>Parameters data goes here. This pipeline has {Object.keys(pipeline.parameters || {}).length} parameters.</p>
+          <div className="p-5 bg-white border border-slate-200 rounded-2xl text-slate-800 font-medium text-sm shadow-card">
+            <p>Parameters data is indexed. This pipeline references {Object.keys(pipeline.parameters || {}).length} parameter(s).</p>
           </div>
         </section>
 

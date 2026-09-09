@@ -25,55 +25,55 @@ const CHANGE_TYPES = [
 ];
 
 const RISK_STYLES = {
-  CRITICAL: { bg: 'bg-red-500/15', border: 'border-red-500/40', text: 'text-red-400', icon: ShieldX },
-  HIGH: { bg: 'bg-orange-500/15', border: 'border-orange-500/40', text: 'text-orange-400', icon: ShieldAlert },
-  MEDIUM: { bg: 'bg-yellow-500/15', border: 'border-yellow-500/40', text: 'text-yellow-400', icon: Shield },
-  LOW: { bg: 'bg-green-500/15', border: 'border-green-500/40', text: 'text-green-400', icon: ShieldCheck },
+  CRITICAL: { bg: 'bg-red-50 border border-red-200', border: 'border-red-200', text: 'text-red-700', icon: ShieldX },
+  HIGH: { bg: 'bg-orange-50 border border-orange-200', border: 'border-orange-200', text: 'text-orange-700', icon: ShieldAlert },
+  MEDIUM: { bg: 'bg-amber-50 border border-amber-200', border: 'border-amber-200', text: 'text-amber-700', icon: Shield },
+  LOW: { bg: 'bg-emerald-50 border border-emerald-200', border: 'border-emerald-200', text: 'text-emerald-700', icon: ShieldCheck },
 };
 
 const SEVERITY_DOT = {
-  HIGH: 'bg-red-400',
-  MEDIUM: 'bg-yellow-400',
-  LOW: 'bg-green-400',
-  INFO: 'bg-blue-400',
+  HIGH: 'bg-red-500',
+  MEDIUM: 'bg-amber-500',
+  LOW: 'bg-emerald-500',
+  INFO: 'bg-sky-500',
 };
 
 function FindingRow({ finding }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="border border-border-color rounded-lg bg-bg-surface overflow-hidden">
+    <div className="border border-border-color rounded-xl bg-white overflow-hidden shadow-xs hover:border-slate-300 transition-colors">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 p-3 text-left hover:bg-bg-surface-elevated transition-colors"
+        className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-slate-50 transition-colors"
       >
-        <span className={`w-2 h-2 rounded-full shrink-0 ${SEVERITY_DOT[finding.severity] || 'bg-gray-400'}`} />
-        <span className="font-medium text-text-primary text-sm flex-1">{finding.asset}</span>
-        <span className="px-2 py-0.5 text-[10px] rounded bg-bg-base border border-border-color text-text-secondary">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${SEVERITY_DOT[finding.severity] || 'bg-slate-400'}`} />
+        <span className="font-semibold text-text-primary text-sm flex-1">{finding.asset}</span>
+        <span className="px-2 py-0.5 text-[11px] font-medium rounded-md bg-slate-100 border border-slate-200 text-slate-700">
           {finding.asset_type}
         </span>
-        <span className="px-2 py-0.5 text-[10px] rounded bg-bg-base border border-border-color text-text-secondary">
+        <span className="px-2 py-0.5 text-[11px] font-medium rounded-md bg-blue-50 border border-blue-200 text-blue-700">
           {finding.confidence}
         </span>
-        {expanded ? <ChevronUp size={14} className="text-text-secondary" /> : <ChevronDown size={14} className="text-text-secondary" />}
+        {expanded ? <ChevronUp size={15} className="text-text-secondary" /> : <ChevronDown size={15} className="text-text-secondary" />}
       </button>
       {expanded && (
-        <div className="p-3 pt-0 border-t border-border-color space-y-2 text-xs">
-          <p className="text-text-secondary">{finding.reason}</p>
+        <div className="p-4 pt-0 border-t border-border-color space-y-2.5 text-xs bg-slate-50/50">
+          <p className="text-slate-700 font-medium leading-relaxed">{finding.reason}</p>
           {finding.evidence?.length > 0 && (
             <div>
-              <span className="font-semibold text-text-secondary">Evidence:</span>
+              <span className="font-semibold text-slate-800">Evidence:</span>
               <div className="mt-1 space-y-1">
                 {finding.evidence.map((ev, i) => (
-                  <code key={i} className="block px-2 py-1 bg-bg-base rounded border border-border-color text-accent-primary font-mono text-[11px] break-all">
+                  <code key={i} className="block px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 text-accent-primary font-mono text-[11px] break-all shadow-xs">
                     {ev}
                   </code>
                 ))}
               </div>
             </div>
           )}
-          <div className="flex gap-3 text-text-secondary">
-            <span>Relationship: <strong>{finding.relationship}</strong></span>
-            <span>Impact: <strong>{finding.impact_type}</strong></span>
+          <div className="flex gap-4 text-slate-600 pt-1">
+            <span>Relationship: <strong className="text-slate-900">{finding.relationship}</strong></span>
+            <span>Impact: <strong className="text-slate-900">{finding.impact_type}</strong></span>
           </div>
         </div>
       )}
@@ -109,21 +109,21 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
   const RiskIcon = riskStyle?.icon || Shield;
 
   return (
-    <div className="flex flex-col h-full bg-bg-base overflow-y-auto">
+    <div className="flex flex-col h-full bg-slate-50 overflow-y-auto">
       {/* Header */}
-      <div className="p-6 border-b border-border-color bg-bg-surface">
+      <div className="p-6 border-b border-border-color bg-white shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {onBack && (
               <button
                 onClick={onBack}
-                className="p-1.5 rounded-lg border border-border-color text-text-secondary hover:bg-bg-surface-elevated hover:text-text-primary transition-colors"
+                className="p-1.5 rounded-lg border border-border-color bg-white text-text-secondary hover:bg-slate-50 hover:text-text-primary transition-colors shadow-xs"
                 title="Back"
               >
                 <ArrowLeft size={16} />
               </button>
             )}
-            <h2 className="text-xl font-semibold text-text-primary flex items-center gap-2">
+            <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 tracking-tight">
               <GitBranch size={20} className="text-accent-primary" />
               Change Impact Analysis
             </h2>
@@ -133,12 +133,12 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
         {/* Controls */}
         <div className="flex items-center gap-3 mt-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-text-secondary">Target:</span>
-            <span className="px-2 py-1 bg-bg-base border border-border-color rounded text-sm font-medium text-accent-primary">
+            <span className="text-xs font-medium text-text-secondary">Target:</span>
+            <span className="px-2.5 py-1 bg-blue-50 border border-blue-200/80 rounded-lg text-xs font-semibold text-accent-primary">
               {assetName}
             </span>
             {objectType && (
-              <span className="px-2 py-1 bg-bg-base border border-border-color rounded text-xs text-text-secondary">
+              <span className="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium">
                 {objectType}
               </span>
             )}
@@ -146,7 +146,7 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
           <select
             value={changeType}
             onChange={(e) => setChangeType(e.target.value)}
-            className="px-3 py-1.5 bg-bg-base border border-border-color rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary"
+            className="px-3 py-1.5 bg-white border border-border-color rounded-xl text-xs font-semibold text-slate-800 shadow-xs focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20"
           >
             {CHANGE_TYPES.map((ct) => (
               <option key={ct.value} value={ct.value}>{ct.label}</option>
@@ -155,9 +155,9 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
           <button
             onClick={runAnalysis}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-1.5 bg-accent-primary text-white rounded-lg text-sm font-medium hover:bg-accent-primary/90 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-1.5 bg-accent-primary text-white rounded-xl text-xs font-semibold hover:bg-accent-hover shadow-xs transition-colors disabled:opacity-50"
           >
-            {loading ? <RefreshCw className="animate-spin" size={14} /> : <GitBranch size={14} />}
+            {loading ? <RefreshCw className="animate-spin" size={13} /> : <GitBranch size={13} />}
             {loading ? 'Analyzing...' : 'Analyze Impact'}
           </button>
         </div>
@@ -197,17 +197,17 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             )}
 
             {/* Risk Banner */}
-            <div className={`flex items-center gap-4 p-5 rounded-xl border ${riskStyle?.bg} ${riskStyle?.border}`}>
+            <div className={`flex items-center gap-4 p-5 rounded-2xl border ${riskStyle?.bg} ${riskStyle?.border} shadow-xs`}>
               <RiskIcon size={32} className={riskStyle?.text} />
               <div className="flex-1">
-                <div className={`text-2xl font-bold ${riskStyle?.text}`}>
+                <div className={`text-2xl font-black ${riskStyle?.text} tracking-tight`}>
                   {result.risk?.level} RISK
                 </div>
-                <div className="text-sm text-text-secondary mt-1">
-                  Score: {result.risk?.score}/100
+                <div className="text-sm font-semibold text-slate-700 mt-0.5">
+                  Risk Score: {result.risk?.score}/100
                 </div>
               </div>
-              <div className="text-right text-sm text-text-secondary">
+              <div className="text-right text-xs font-semibold text-slate-700 space-y-0.5">
                 <div>{result.direct_impacts?.length || 0} direct impacts</div>
                 <div>{result.indirect_impacts?.length || 0} indirect impacts</div>
                 {result.external_systems?.length > 0 && (
@@ -219,11 +219,11 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* Risk Reasons */}
             {result.risk?.reasons?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Why?</h3>
-                <div className="space-y-1">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Why?</h3>
+                <div className="space-y-1.5">
                   {result.risk.reasons.map((reason, i) => (
-                    <div key={i} className="flex items-start gap-2 text-sm text-text-primary">
-                      <span className="text-accent-primary mt-0.5">•</span>
+                    <div key={i} className="flex items-start gap-2 text-sm text-slate-900 font-medium">
+                      <span className="text-accent-primary mt-0.5 font-bold">•</span>
                       {reason}
                     </div>
                   ))}
@@ -234,15 +234,15 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* Impact Chain */}
             {result.impact_chain?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Impact Chain</h3>
-                <div className="flex flex-wrap items-center gap-1 text-xs font-mono">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Impact Chain</h3>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
                   {result.impact_chain.map((item, i) => (
                     <React.Fragment key={i}>
-                      <span className="px-2 py-1 bg-bg-surface border border-border-color rounded text-text-primary">
+                      <span className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold shadow-xs">
                         {item}
                       </span>
                       {i < result.impact_chain.length - 1 && (
-                        <span className="text-text-secondary">→</span>
+                        <span className="text-slate-500 font-bold">→</span>
                       )}
                     </React.Fragment>
                   ))}
@@ -253,10 +253,10 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* Affected Pipelines */}
             {result.affected_pipelines?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Affected Pipelines</h3>
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Affected Pipelines</h3>
                 <div className="flex flex-wrap gap-2">
                   {result.affected_pipelines.map((p, i) => (
-                    <span key={i} className="px-2 py-1 bg-bg-surface border border-border-color rounded text-sm text-text-primary">
+                    <span key={i} className="px-3 py-1 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 font-semibold shadow-xs">
                       {p}
                     </span>
                   ))}
@@ -267,10 +267,10 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* External Systems */}
             {result.external_systems?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">External Systems</h3>
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">External Systems</h3>
                 <div className="flex flex-wrap gap-2">
                   {result.external_systems.map((s, i) => (
-                    <span key={i} className="flex items-center gap-1 px-2 py-1 bg-accent-secondary/10 border border-accent-secondary/30 rounded text-sm text-accent-secondary">
+                    <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-800 font-semibold shadow-xs">
                       <ExternalLink size={12} />
                       {s}
                     </span>
@@ -282,7 +282,7 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* Direct Impacts */}
             {result.direct_impacts?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Direct Impacts ({result.direct_impacts.length})
                 </h3>
                 <div className="space-y-2">
@@ -296,7 +296,7 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* Indirect Impacts */}
             {result.indirect_impacts?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Indirect Impacts ({result.indirect_impacts.length})
                 </h3>
                 <div className="space-y-2">
@@ -304,7 +304,7 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
                     <FindingRow key={i} finding={f} />
                   ))}
                   {result.indirect_impacts.length > 10 && (
-                    <p className="text-xs text-text-secondary text-center py-2">
+                    <p className="text-xs text-slate-700 font-semibold text-center py-2">
                       + {result.indirect_impacts.length - 10} more indirect impacts
                     </p>
                   )}
@@ -315,11 +315,11 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
             {/* Consequences */}
             {result.potential_consequences?.length > 0 && (
               <section>
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Potential Consequences</h3>
-                <div className="space-y-1">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Potential Consequences</h3>
+                <div className="space-y-1.5">
                   {result.potential_consequences.map((c, i) => (
-                    <div key={i} className="flex items-start gap-2 text-sm text-text-primary">
-                      <AlertTriangle size={14} className="text-yellow-400 mt-0.5 shrink-0" />
+                    <div key={i} className="flex items-start gap-2 text-sm text-slate-900 font-medium">
+                      <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
                       {c}
                     </div>
                   ))}
@@ -329,9 +329,9 @@ export default function ChangeImpactPanel({ assetName, objectType, onBack }) {
 
             {/* Recommendation */}
             {result.recommendation && (
-              <section className="rounded-xl border border-accent-primary/30 bg-accent-primary/5 p-5">
-                <h3 className="text-sm font-semibold text-accent-primary uppercase tracking-wider mb-2">Recommendation</h3>
-                <div className="text-sm text-text-primary whitespace-pre-wrap leading-relaxed">
+              <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 shadow-xs">
+                <h3 className="text-xs font-bold text-accent-primary uppercase tracking-wider mb-2">Recommendation</h3>
+                <div className="text-sm text-slate-900 font-medium whitespace-pre-wrap leading-relaxed">
                   {result.recommendation}
                 </div>
               </section>

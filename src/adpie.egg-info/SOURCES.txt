@@ -9,6 +9,7 @@ src/adpie.egg-info/top_level.txt
 src/pie/__init__.py
 src/pie/cli.py
 src/pie/ai/__init__.py
+src/pie/ai/chat_session.py
 src/pie/ai/engine.py
 src/pie/ai/models.py
 src/pie/ai/prompts.py
@@ -50,7 +51,9 @@ src/pie/discovery/repository.py
 src/pie/graph/__init__.py
 src/pie/graph/audit_engine.py
 src/pie/graph/builder.py
+src/pie/graph/change_impact_engine.py
 src/pie/graph/deletion_simulator.py
+src/pie/graph/expression_analyzer.py
 src/pie/graph/models.py
 src/pie/graph/query_engine.py
 src/pie/graph/storyteller.py

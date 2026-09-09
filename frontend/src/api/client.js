@@ -17,3 +17,13 @@ apiClient.interceptors.request.use(
     return Promise.reject(error);
   }
 );
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('x_session_token');
+    }
+    return Promise.reject(error);
+  }
+);
