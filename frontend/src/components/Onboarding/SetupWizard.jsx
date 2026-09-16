@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Database, FolderOpen, Loader2, CheckCircle2 } from 'lucide-react';
+import { Server, Database, FolderOpen, Loader2, CheckCircle2, LogOut, User, ArrowLeft } from 'lucide-react';
 import { apiClient } from '../../api/client';
 
 export default function SetupWizard({ onComplete }) {
   const [step, setStep] = useState(0);
   const [subscriptions, setSubscriptions] = useState([]);
   const [factories, setFactories] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   
   const [selectedSub, setSelectedSub] = useState(null);
   const [selectedFactory, setSelectedFactory] = useState(null);
@@ -18,6 +19,10 @@ export default function SetupWizard({ onComplete }) {
     const handleMessage = async (event) => {
       if (event.data?.type === 'PIE_AUTH_SUCCESS' && event.data.sessionToken) {
         localStorage.setItem('x_session_token', event.data.sessionToken);
+        try {
+          const { data } = await apiClient.get('/auth/session');
+          setCurrentUser(data);
+        } catch (e) {}
         // Always proceed to subscription selection after login
         setStep(1);
         fetchSubscriptions();
@@ -32,20 +37,43 @@ export default function SetupWizard({ onComplete }) {
     const checkAuth = async () => {
       if (localStorage.getItem('x_session_token')) {
         try {
-          await apiClient.get('/auth/session');
+          const { data } = await apiClient.get('/auth/session');
+          setCurrentUser(data);
           // Always proceed to subscription selection to allow factory re-selection
           setStep(1);
           fetchSubscriptions();
         } catch(e) {
           localStorage.removeItem('x_session_token');
+          setCurrentUser(null);
           setStep(0);
         }
       } else {
+        setCurrentUser(null);
         setStep(0);
       }
     };
     checkAuth();
   }, []);
+
+  const handleSwitchAccount = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.post('/auth/logout');
+    } catch (e) {
+      console.warn('Logout request failed:', e);
+    } finally {
+      localStorage.removeItem('x_session_token');
+      localStorage.removeItem('selected_factory');
+      setCurrentUser(null);
+      setSelectedSub(null);
+      setSelectedFactory(null);
+      setSubscriptions([]);
+      setFactories([]);
+      setStep(0);
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     setLoading(true);
@@ -53,7 +81,21 @@ export default function SetupWizard({ onComplete }) {
     try {
       const { data } = await apiClient.post('/auth/login');
       setAuthUrl(data.login_url);
-      window.open(data.login_url, '_blank', 'width=600,height=700');
+
+      const width = 600;
+      const height = 700;
+      const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+      const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+      const screenW = window.innerWidth || document.documentElement.clientWidth || screen.width;
+      const screenH = window.innerHeight || document.documentElement.clientHeight || screen.height;
+      const left = Math.max(0, Math.floor(dualScreenLeft + (screenW - width) / 2));
+      const top = Math.max(0, Math.floor(dualScreenTop + (screenH - height) / 2));
+
+      window.open(
+        data.login_url,
+        '_blank',
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
+      );
 
       const pollUrl = data.poll_url.replace('http://localhost:8000/api/v1', '');
       
@@ -144,91 +186,190 @@ export default function SetupWizard({ onComplete }) {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center bg-bg-base p-8">
-      <div className="max-w-2xl w-full bg-bg-surface border border-border-color rounded-xl shadow-2xl p-8 relative overflow-hidden">
+    <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden glass-canvas p-6">
+      {/* Ambient glowing glassy light-blue orbs */}
+      <div className="absolute top-[-10%] left-[-8%] w-[560px] h-[560px] rounded-full bg-gradient-to-tr from-sky-300/30 to-blue-400/20 blur-[110px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-8%] w-[600px] h-[600px] rounded-full bg-gradient-to-bl from-blue-300/30 to-indigo-300/20 blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] rounded-full bg-sky-200/25 blur-[130px] pointer-events-none" />
+      
+      {/* Subtle glassy grid overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(#0284c7_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.06] pointer-events-none" />
+
+      {/* Main Glassy Card Container */}
+      <div className={`w-full ${step === 0 ? 'max-w-[450px]' : 'max-w-xl'} glass-card-premium rounded-[28px] p-8 md:p-10 relative overflow-hidden transition-all duration-300 z-10`}>
         
-        {/* Progress Bar */}
-        <div className="absolute top-0 left-0 w-full h-1 bg-bg-surface-elevated">
-          <div className="h-full bg-accent-primary transition-all duration-500" style={{ width: `${(step / 4) * 100}%` }} />
-        </div>
-
-        <div className="mb-8 text-center">
-          {step === 0 ? (
-            <>
-              <div className="flex justify-center mb-5">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg shadow-accent-primary/30">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 48 46" fill="none">
-                    <path fill="white" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/>
-                  </svg>
-                </div>
-              </div>
-              <div className="inline-block px-6 py-4 rounded-xl bg-bg-surface-elevated border border-border-color mb-4">
-                <h2 className="text-xl font-bold text-text-primary mb-1">Azure Data</h2>
-                <h3 className="text-lg font-semibold text-accent-primary tracking-wide">Platform Intelligence Engine</h3>
-              </div>
-              <p className="text-text-secondary text-sm">Configure your workspace to start exploring.</p>
-            </>
-          ) : (
-            <>
-              <h2 className="text-2xl font-semibold text-text-primary mb-2">Configure Your Workspace</h2>
-              <p className="text-text-secondary">Select the environment you want to explore with PIE.</p>
-            </>
-          )}
-        </div>
-
-        {error && (
-          <div className="p-4 mb-6 bg-red-500/10 border border-red-500/50 rounded-lg text-red-500 text-sm">
-            {error}
+        {/* Progress Bar (Only visible during workspace setup steps) */}
+        {step > 0 && (
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100">
+            <div className="h-full bg-gradient-to-r from-accent-primary to-accent-secondary transition-all duration-500" style={{ width: `${(step / 4) * 100}%` }} />
           </div>
         )}
 
-        {/* Step 0: Authentication */}
-        {step === 0 && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center py-6">
-            <h3 className="text-lg font-medium mb-2">Connect Azure Environment</h3>
-            <p className="text-text-secondary text-center mb-6 max-w-sm text-sm">
-              Authenticate with your Microsoft account to discover your data engineering assets.
-            </p>
-            
-            <button 
-              onClick={handleLogin}
-              disabled={loading}
-              className="px-6 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white rounded-lg font-medium transition-colors w-full flex justify-center items-center gap-2"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : null}
-              {loading ? 'Waiting for authentication...' : 'Login with Microsoft'}
-            </button>
+        {/* Step 0: Clean Centered Login UI (matching screenshot) */}
+        {step === 0 ? (
+          <div className="text-center animate-in fade-in zoom-in-95 duration-300">
+            {currentUser ? (
+              /* If already authenticated, show the exact success layout from screenshot */
+              <>
+                <div className="w-[64px] h-[64px] mx-auto mb-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center font-bold text-2xl text-emerald-600 shadow-[0_4px_14px_rgba(5,150,105,0.12)]">
+                  ✓
+                </div>
+                <h1 className="text-xl font-bold text-slate-900 mb-2 tracking-tight">
+                  Authenticated Successfully
+                </h1>
+                <p className="text-base font-bold text-slate-900 mb-0.5">
+                  {currentUser?.claims?.display_name || 'Active User'}
+                </p>
+                <p className="text-xs font-medium text-slate-600 mb-3 break-all">
+                  {currentUser?.user_id}
+                </p>
+                <div className="mb-4">
+                  <span className="inline-block px-3.5 py-1 bg-sky-50 border border-sky-200 text-accent-primary text-xs font-semibold rounded-full shadow-2xs">
+                    Session Connected
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed mb-6">
+                  Connected to Microsoft Azure. Select your workspace to start exploring.
+                </p>
 
-            {authUrl && (
-              <a href={authUrl} target="_blank" rel="noreferrer" className="text-sm text-accent-primary hover:underline mt-4">
-                Click here if the login window didn't open
-              </a>
+                <div className="space-y-2.5">
+                  <button
+                    onClick={() => { setStep(1); fetchSubscriptions(); }}
+                    className="w-full py-3 px-5 bg-accent-primary hover:bg-accent-hover text-white font-bold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Continue to Subscriptions</span>
+                    <span>→</span>
+                  </button>
+                  <button
+                    onClick={handleSwitchAccount}
+                    className="w-full py-2.5 px-4 bg-white/90 hover:bg-white border border-slate-300 text-slate-700 font-semibold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer"
+                  >
+                    Switch to Another Account
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* Unauthenticated clean login card */
+              <>
+                <div className="w-[64px] h-[64px] mx-auto mb-5 rounded-2xl bg-gradient-to-b from-sky-50 to-blue-100/70 border border-blue-200/80 flex items-center justify-center shadow-[0_4px_14px_rgba(14,116,144,0.1)]">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4C9.11 4 6.6 5.64 5.35 8.04C2.34 8.36 0 10.91 0 14C0 17.31 2.69 20 6 20H19C21.76 20 24 17.76 24 15C24 12.36 21.95 10.22 19.35 10.04Z" fill="#2563eb"/>
+                  </svg>
+                </div>
+
+                <h1 className="text-xl font-bold text-slate-900 mb-1.5 tracking-tight">
+                  Sign in to Ad-PIE
+                </h1>
+                
+                <p className="text-xs font-medium text-slate-600 mb-3.5">
+                  Azure Data — Platform Intelligence Engine
+                </p>
+
+                <div className="mb-6">
+                  <span className="inline-block px-3.5 py-1 bg-sky-50/90 backdrop-blur-sm border border-sky-200 text-accent-primary text-xs font-semibold rounded-full shadow-2xs">
+                    Enterprise Identity • Microsoft Entra
+                  </span>
+                </div>
+
+                {error && (
+                  <div className="p-3.5 mb-5 bg-red-50/90 border border-red-200 rounded-xl text-red-600 text-xs font-medium text-left">
+                    {error}
+                  </div>
+                )}
+
+                <button 
+                  onClick={handleLogin}
+                  disabled={loading}
+                  className="w-full py-3.5 px-5 bg-white/95 hover:bg-white border border-slate-200 hover:border-blue-300 text-slate-900 font-bold rounded-2xl shadow-xs hover:shadow-[0_8px_25px_rgba(37,99,235,0.12)] transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 mb-4"
+                >
+                  {loading ? (
+                    <Loader2 className="animate-spin text-accent-primary" size={18} />
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 21 21">
+                      <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                      <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                      <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                      <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                    </svg>
+                  )}
+                  <span className="text-sm">{loading ? 'Waiting for authentication...' : 'Login with Microsoft'}</span>
+                </button>
+
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Authenticate with your Microsoft account to discover subscriptions, factories, and pipeline lineage.
+                </p>
+
+                {authUrl && (
+                  <a href={authUrl} target="_blank" rel="noreferrer" className="inline-block text-xs font-semibold text-accent-primary hover:underline mt-4">
+                    Popup blocked? Click here to open login window
+                  </a>
+                )}
+              </>
             )}
+          </div>
+        ) : (
+          /* Steps 1, 2, 3, 4 Header */
+          <div className="mb-6 text-center">
+            <h2 className="text-xl font-bold text-slate-900 mb-1">Configure Your Workspace</h2>
+            <p className="text-slate-600 text-xs font-medium">Select the environment you want to explore with PIE.</p>
+          </div>
+        )}
+
+        {error && step > 0 && (
+          <div className="p-3.5 mb-5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-medium">
+            {error}
           </div>
         )}
 
         {/* Step 1: Subscriptions */}
         {step === 1 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-lg font-medium flex items-center gap-2 mb-4">
-              <Server className="text-accent-primary" size={20} />
+            {/* Connected Account & Switch Account Option */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-sky-50/70 backdrop-blur-sm border border-sky-200/70 shadow-2xs mb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-accent-primary to-accent-secondary text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  {currentUser?.claims?.display_name?.charAt(0) || currentUser?.user_id?.charAt(0) || <User size={14} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-slate-900 truncate">
+                    {currentUser?.claims?.display_name || currentUser?.user_id || 'Connected Account'}
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium truncate">
+                    {currentUser?.user_id}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSwitchAccount}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white/95 hover:bg-red-50 hover:border-red-300 hover:text-red-700 text-xs font-bold text-slate-700 transition-colors shadow-xs shrink-0 cursor-pointer"
+                title="Sign out and log into another Microsoft account"
+              >
+                <LogOut size={13} />
+                <span>Switch Account</span>
+              </button>
+            </div>
+
+            <h3 className="text-base font-bold flex items-center gap-2 mb-4 text-slate-900">
+              <Server className="text-accent-primary" size={18} />
               1. Select Azure Subscription
             </h3>
             {loading ? (
               <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin text-accent-primary" /></div>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-2.5">
                 {subscriptions.map(sub => (
                   <button 
                     key={sub.subscription_id}
                     onClick={() => handleSubSelect(sub)}
-                    className="p-4 rounded-lg border border-border-color bg-bg-base hover:border-accent-primary hover:bg-bg-surface-elevated transition-all flex items-center justify-between text-left group"
+                    className="p-4 rounded-2xl glass-tile flex items-center justify-between text-left group cursor-pointer"
                   >
                     <div>
-                      <div className="font-medium">{sub.subscription_name}</div>
+                      <div className="font-bold text-sm text-slate-900">{sub.subscription_name}</div>
                     </div>
-                    <div className="w-6 h-6 rounded-full border border-border-color group-hover:border-accent-primary flex items-center justify-center">
-                       <div className="w-3 h-3 rounded-full bg-accent-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="w-5 h-5 rounded-full border border-slate-300 group-hover:border-accent-primary flex items-center justify-center">
+                       <div className="w-2.5 h-2.5 rounded-full bg-accent-primary opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </button>
                 ))}
@@ -240,66 +381,85 @@ export default function SetupWizard({ onComplete }) {
         {/* Step 2: Factories */}
         {step === 2 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-             <div className="flex items-center gap-2 mb-6 cursor-pointer text-text-secondary hover:text-text-primary" onClick={() => setStep(1)}>
-                ← Back to Subscriptions
+             <div className="flex items-center justify-between mb-4">
+               <button 
+                 onClick={() => setStep(1)} 
+                 className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-accent-primary transition-colors cursor-pointer"
+               >
+                 <ArrowLeft size={14} />
+                 <span>Back to Subscriptions</span>
+               </button>
+
+               <button
+                 onClick={handleSwitchAccount}
+                 disabled={loading}
+                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white/95 hover:bg-red-50 hover:border-red-300 hover:text-red-700 text-xs font-bold text-slate-700 transition-colors shadow-xs shrink-0 cursor-pointer"
+                 title="Sign out and log into another Microsoft account"
+               >
+                 <LogOut size={13} />
+                 <span>Switch Account</span>
+               </button>
              </div>
-            <h3 className="text-lg font-medium flex items-center gap-2 mb-3">
-              <Database className="text-accent-primary" size={20} />
+
+            <h3 className="text-base font-bold flex items-center gap-2 mb-3 text-slate-900">
+              <Database className="text-accent-primary" size={18} />
               2. Select Data Factory
             </h3>
-            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 mb-4 px-3 py-2 rounded-lg bg-bg-base border border-border-color">
-              <div className="flex items-center gap-2">
-                <Server size={14} className="text-status-success shrink-0" />
-                <span className="text-sm text-text-secondary">Subscription</span>
+            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 mb-4 px-3.5 py-2.5 rounded-2xl bg-sky-50/70 backdrop-blur-sm border border-sky-200/70">
+              <div className="flex items-center gap-1.5">
+                <Server size={13} className="text-emerald-600 shrink-0" />
+                <span className="text-xs font-semibold text-slate-700">Subscription</span>
               </div>
-              <span className="text-text-secondary">:</span>
-              <span className="text-sm font-medium text-status-success">{selectedSub?.subscription_name}</span>
+              <span className="text-slate-400">:</span>
+              <span className="text-xs font-bold text-emerald-800">{selectedSub?.subscription_name}</span>
             </div>
             {loading ? (
               <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin text-accent-primary" /></div>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-2.5">
                 {factories.map(f => (
                   <button 
                     key={f.factory_name}
                     onClick={() => handleFactorySelect(f)}
-                    className="p-4 rounded-lg border border-border-color bg-bg-base hover:border-accent-primary hover:bg-bg-surface-elevated transition-all flex items-center justify-between text-left group"
+                    className="p-4 rounded-2xl glass-tile flex items-center justify-between text-left group cursor-pointer"
                   >
-                    <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2 gap-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <Database size={14} className="text-accent-primary shrink-0" />
-                        <span className="text-sm text-text-secondary">Data Factory</span>
+                    <div className="grid grid-cols-[auto_auto_1fr] items-center gap-x-2.5 gap-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Database size={13} className="text-accent-primary shrink-0" />
+                        <span className="text-xs font-semibold text-slate-700">Data Factory</span>
                       </div>
-                      <span className="text-text-secondary">:</span>
-                      <span className="text-sm font-medium text-accent-primary">{f.factory_name}</span>
+                      <span className="text-slate-400">:</span>
+                      <span className="text-xs font-bold text-accent-primary">{f.factory_name}</span>
 
-                      <div className="flex items-center gap-2">
-                        <FolderOpen size={14} className="text-status-info shrink-0" />
-                        <span className="text-sm text-text-secondary">Resource Group</span>
+                      <div className="flex items-center gap-1.5">
+                        <FolderOpen size={13} className="text-sky-600 shrink-0" />
+                        <span className="text-xs font-semibold text-slate-700">Resource Group</span>
                       </div>
-                      <span className="text-text-secondary">:</span>
-                      <span className="text-sm font-medium text-status-info">{f.resource_group}</span>
+                      <span className="text-slate-400">:</span>
+                      <span className="text-xs font-bold text-slate-900">{f.resource_group}</span>
                     </div>
-                    <div className="w-6 h-6 rounded-full border border-border-color group-hover:border-accent-primary flex items-center justify-center">
-                       <div className="w-3 h-3 rounded-full bg-accent-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="w-5 h-5 rounded-full border border-slate-300 group-hover:border-accent-primary flex items-center justify-center">
+                       <div className="w-2.5 h-2.5 rounded-full bg-accent-primary opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </button>
                 ))}
-                {factories.length === 0 && <div className="text-text-secondary text-sm">No factories found.</div>}
+                {factories.length === 0 && <div className="text-slate-700 text-sm font-medium">No factories found.</div>}
               </div>
             )}
           </div>
         )}
 
+
+
         {/* Step 3: Syncing */}
         {step === 3 && (
           <div className="py-12 flex flex-col items-center justify-center animate-in fade-in duration-500">
              <div className="relative mb-6">
-                <div className="w-16 h-16 rounded-full border-4 border-bg-surface-elevated border-t-accent-primary animate-spin" />
-                <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-text-secondary" size={20} />
+                <div className="w-16 h-16 rounded-full border-4 border-slate-100 border-t-accent-primary animate-spin" />
+                <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-accent-primary" size={20} />
              </div>
-             <h3 className="text-xl font-medium mb-2">Syncing {selectedFactory?.factory_name}</h3>
-             <p className="text-text-secondary text-center max-w-sm">
+             <h3 className="text-xl font-extrabold text-slate-900 mb-2">Syncing {selectedFactory?.factory_name}</h3>
+             <p className="text-slate-700 text-center max-w-sm text-sm font-medium leading-relaxed">
                Extracting pipelines, mapping datasets, and building the in-memory knowledge graph...
              </p>
           </div>
@@ -308,14 +468,14 @@ export default function SetupWizard({ onComplete }) {
         {/* Step 4: Complete */}
         {step === 4 && (
           <div className="py-12 flex flex-col items-center justify-center animate-in zoom-in duration-500">
-             <div className="w-16 h-16 rounded-full bg-status-success/20 flex items-center justify-center mb-6 text-status-success">
+             <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center justify-center mb-6 text-emerald-600 shadow-sm">
                 <CheckCircle2 size={32} />
              </div>
-             <h3 className="text-xl font-medium mb-2">Ready to Explore</h3>
-             <p className="text-text-secondary text-center max-w-sm mb-8">
+             <h3 className="text-xl font-extrabold text-slate-900 mb-2">Ready to Explore</h3>
+             <p className="text-slate-700 text-center max-w-sm mb-8 text-sm font-medium">
                Your workspace is synced and ready.
              </p>
-             <button onClick={onComplete} className="px-6 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white rounded-lg font-medium transition-colors w-full">
+             <button onClick={onComplete} className="px-6 py-3 bg-accent-primary hover:bg-accent-hover text-white rounded-xl font-semibold transition-all w-full shadow-sm">
                Enter Workspace
              </button>
           </div>
